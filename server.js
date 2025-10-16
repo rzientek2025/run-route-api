@@ -62,8 +62,8 @@ app.post('/api/routes/generate', async (req, res) => {
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
         const distanceMeters = route.distance.value;
 
-        // II. Pobieranie Danych o Elewacji (Google Elevation API)
-       const elevationResponse = await mapsClient.elevation({
+       // II. Pobieranie Danych o Elewacji (Google Elevation API)
+const elevationResponse = await mapsClient.elevation({ 
     params: {
         path: polyline,
         samples: 256, 
@@ -71,11 +71,24 @@ app.post('/api/routes/generate', async (req, res) => {
     },
 });
 
-        const elevations = Array.isArray(elevationResponse.data.results) 
-    ? elevationResponse.data.results.map(r => r.elevation) 
-    : []; // Zwraca pustą tablicę, jeśli dane są niepoprawne
-        const elevationGain = calculateElevationGain(elevations);
+const results = elevationResponse.data.results; // Przypisanie dla czytelności
 
+// Zabezpieczamy się przed błędem "map is not a function"
+const elevations = Array.isArray(results) 
+    ? results.map(r => r.elevation) 
+    : [];
+
+const elevationGain = calculateElevationGain(elevations);
+
+// III. Zapis do Bazy Danych
+// ... reszta kodu ...
+// Konwertowanie Polyline na format WKT dla PostGIS (LINESTRING)
+// Zabezpieczamy się przed błędem "map is not a function"
+const pathCoordinates = Array.isArray(results)
+    ? results.map(r => `${r.location.lng} ${r.location.lat}`).join(',')
+    : ''; 
+
+const lineString = `LINESTRING(${pathCoordinates})`;
         // III. Zapis do Bazy Danych
         const startPoint = route.start_location;
         const endPoint = route.end_location;
