@@ -124,4 +124,19 @@ app.post('/api/routes/generate', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('
+        console.error('Błąd podczas generowania trasy:', error.message);
+        // Jeśli błąd pochodzi z Google Maps, zwróć go
+        if (error.response && error.response.data) {
+             return res.status(500).json({ 
+                error: 'Błąd API Google Maps', 
+                details: error.response.data.error_message 
+            });
+        }
+        res.status(500).json({ error: 'Wewnętrzny błąd serwera', details: error.message });
+    }
+});
+
+// Uruchomienie serwera
+app.listen(port, () => {
+  console.log(`Serwer Node.js nasłuchuje na porcie ${port} - Online.`);
+});
