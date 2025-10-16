@@ -59,10 +59,12 @@ app.post('/api/routes/generate', async (req, res) => {
             },
         });
 
-        // Weryfikacja, czy trasa została zwrócona
+        // KRYTYCZNA WERYFIKACJA TRASY
         if (!directionsResponse.data.routes || directionsResponse.data.routes.length === 0) {
-            return res.status(404).json({ error: 'Nie znaleziono trasy między podanymi punktami.' });
+            console.error('Błąd Directions API: Nie znaleziono trasy.', directionsResponse.data.status);
+            return res.status(404).json({ error: 'Błąd API Google Maps: Nie znaleziono trasy między podanymi punktami.' });
         }
+        // KONIEC KRYTYCZNEJ WERYFIKACJI
 
         const route = directionsResponse.data.routes[0].legs[0];
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
