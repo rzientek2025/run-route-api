@@ -63,13 +63,13 @@ app.post('/api/routes/generate', async (req, res) => {
         const distanceMeters = route.distance.value;
 
         // II. Pobieranie Danych o Elewacji (Google Elevation API)
-        const elevationResponse = await mapsClient.elevationAlongPath({
-            params: {
-                path: polyline,
-                samples: 256, 
-                key: apiKey,
-            },
-        });
+       const elevationResponse = await mapsClient.elevation({
+    params: {
+        path: polyline,
+        samples: 256, 
+        key: apiKey,
+    },
+});
 
         const elevations = elevationResponse.data.results.map(r => r.elevation);
         const elevationGain = calculateElevationGain(elevations);
