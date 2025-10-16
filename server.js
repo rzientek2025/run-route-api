@@ -54,7 +54,7 @@ app.post('/api/routes/generate', async (req, res) => {
                 origin: origin,
                 destination: destination,
                 waypoints: waypoints,
-                mode: 'walking', // Najbliższe bieganiu
+                mode: 'walking', 
                 key: apiKey,
             },
         });
@@ -64,7 +64,7 @@ app.post('/api/routes/generate', async (req, res) => {
         const distanceMeters = route.distance.value;
 
         // II. Pobieranie Danych o Elewacji (Google Elevation API)
-        // POPRAWKA: Zmieniono 'elevationAlongPath' na 'elevation'
+        // POPRAWKA A: Użycie 'elevation' zamiast 'elevationAlongPath'
         const elevationResponse = await mapsClient.elevation({
             params: {
                 path: polyline,
@@ -73,12 +73,11 @@ app.post('/api/routes/generate', async (req, res) => {
             },
         });
 
-        const results = elevationResponse.data.results; // Przypisanie dla czytelności i bezpieczeństwa
+        // POPRAWKA B: Bezpieczne odczytywanie results z użyciem operatora zerowego łączenia (??)
+        // Zapobiega błędom 'map is not a function' jeśli 'results' jest null/undefined
+        const results = elevationResponse.data?.results ?? []; 
 
-        // POPRAWKA: Zabezpieczenie przed błędem 'map is not a function'
-        const elevations = Array.isArray(results) 
-            ? results.map(r => r.elevation) 
-            : []; 
+        const elevations = results.map(r => r.elevation); 
 
         const elevationGain = calculateElevationGain(elevations);
 
@@ -87,10 +86,7 @@ app.post('/api/routes/generate', async (req, res) => {
         const endPoint = route.end_location;
 
         // Konwertowanie Polyline na format WKT dla PostGIS (LINESTRING)
-        // POPRAWKA: Zabezpieczenie przed błędem 'map is not a function'
-        const pathCoordinates = Array.isArray(results)
-            ? results.map(r => `${r.location.lng} ${r.location.lat}`).join(',')
-            : ''; 
+        const pathCoordinates = results.map(r => `${r.location.lng} ${r.location.lat}`).join(',');
             
         const lineString = `LINESTRING(${pathCoordinates})`;
 
@@ -128,19 +124,4 @@ app.post('/api/routes/generate', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Błąd podczas generowania trasy:', error.message);
-        // Jeśli błąd pochodzi z Google Maps, zwróć go
-        if (error.response && error.response.data) {
-             return res.status(500).json({ 
-                error: 'Błąd API Google Maps', 
-                details: error.response.data.error_message 
-            });
-        }
-        res.status(500).json({ error: 'Wewnętrzny błąd serwera', details: error.message });
-    }
-});
-
-// Uruchomienie serwera
-app.listen(port, () => {
-  console.log(`Serwer Node.js nasłuchuje na porcie ${port} - Online.`);
-});
+        console.error('
