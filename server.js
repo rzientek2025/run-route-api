@@ -1,20 +1,27 @@
+Jasne, oto kompletny kod pliku server.js z zaimplementowanymi poprawkami dotyczącymi obsługi błędów z Google API.
+
+Możesz skopiować i wkleić całą zawartość poniżej bezpośrednio do swojego pliku.
+
+Plik: server.js
+JavaScript
+
 // server.js
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config();
-const db = require('./db'); 
+const db = require('./db');
 
 // Upewnij się, że klucz API jest dostępny jako zmienna środowiskowa
-const apiKey = process.env.GOOGLE_API_KEY; 
+const apiKey = process.env.GOOGLE_API_KEY;
 
 if (!apiKey) {
     console.error("Błąd: Zmienna środowiskowa GOOGLE_API_KEY nie została ustawiona.");
-    process.exit(1); 
+    process.exit(1);
 }
 
 const mapsClient = new Client({});
 const app = express();
-const port = process.env.PORT || 3000; 
+const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -54,17 +61,19 @@ app.post('/api/routes/generate', async (req, res) => {
                 origin: origin,
                 destination: destination,
                 waypoints: waypoints,
-                mode: 'walking', 
+                mode: 'walking',
                 key: apiKey,
             },
         });
 
-        // KRYTYCZNA WERYFIKACJA TRASY
-        if (!directionsResponse.data.routes || directionsResponse.data.routes.length === 0) {
-            console.error('Błąd Directions API: Nie znaleziono trasy.', directionsResponse.data.status);
-            return res.status(404).json({ error: 'Błąd API Google Maps: Nie znaleziono trasy między podanymi punktami.' });
+        // Poprawiona weryfikacja odpowiedzi z Directions API
+        if (directionsResponse.data.status !== 'OK' || !directionsResponse.data.routes || directionsResponse.data.routes.length === 0) {
+            console.error('Błąd Directions API:', directionsResponse.data.status, directionsResponse.data.error_message);
+            return res.status(404).json({
+                error: 'Błąd API Google Maps: Nie znaleziono trasy między podanymi punktami.',
+                details: directionsResponse.data.error_message || `Status: ${directionsResponse.data.status}`
+            });
         }
-        // KONIEC KRYTYCZNEJ WERYFIKACJI
 
         const route = directionsResponse.data.routes[0].legs[0];
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
@@ -74,34 +83,49 @@ app.post('/api/routes/generate', async (req, res) => {
         const elevationResponse = await mapsClient.elevation({
             params: {
                 path: polyline,
-                samples: 256, 
+                samples: 256, // Możesz dostosować liczbę próbek
                 key: apiKey,
             },
         });
 
-        // Najbezpieczniejsze odczytanie wyników i obsługa błędu 'map is not a function'
-        const results = elevationResponse.data?.results || []; 
-        
+        // KLUCZOWA ZMIANA: Sprawdzenie statusu odpowiedzi z Elevation API
+        if (elevationResponse.data.status !== 'OK') {
+            console.error('Błąd Elevation API:', elevationResponse.data.status, elevationResponse.data.error_message);
+            return res.status(500).json({
+                error: 'Błąd API Google Maps podczas pobierania danych o wysokości.',
+                details: elevationResponse.data.error_message || `Status: ${elevationResponse.data.status}`
+            });
+        }
+
+        const results = elevationResponse.data.results;
         let elevations = [];
         let pathCoordinates = '';
 
+        // Sprawdzenie, czy `results` jest tablicą i ma zawartość
         if (Array.isArray(results) && results.length > 0) {
             elevations = results.map(r => r.elevation);
             pathCoordinates = results.map(r => `${r.location.lng} ${r.location.lat}`).join(',');
-        } 
-        
+        } else {
+            console.warn('Elevation API zwróciło status OK, ale brak wyników w tablicy.');
+        }
+
         const elevationGain = calculateElevationGain(elevations);
 
         // III. Zapis do Bazy Danych
         const startPoint = route.start_location;
         const endPoint = route.end_location;
 
-        const lineString = `LINESTRING(${pathCoordinates})`; // pathCoordinates jest teraz bezpiecznym stringiem
+        // Zabezpieczenie przed pustym LINESTRING w PostGIS
+        if (!pathCoordinates) {
+            return res.status(500).json({ error: 'Nie udało się przetworzyć współrzędnych trasy dla bazy danych.' });
+        }
+        
+        const lineString = `LINESTRING(${pathCoordinates})`;
 
         const insertQuery = `
             INSERT INTO routes (
-                name, distance_m, elevation_gain_m, polyline, 
-                start_lat, start_lng, end_lat, end_lng, 
+                name, distance_m, elevation_gain_m, polyline,
+                start_lat, start_lng, end_lat, end_lng,
                 created_at, geo_path
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), ST_GeomFromText($9, 4326))
@@ -109,7 +133,7 @@ app.post('/api/routes/generate', async (req, res) => {
         `;
 
         const result = await db.query(insertQuery, [
-            `Trasa z ${origin} do ${destination}`, 
+            `Trasa z ${origin} do ${destination}`,
             distanceMeters,
             elevationGain,
             polyline,
@@ -132,14 +156,15 @@ app.post('/api/routes/generate', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Błąd podczas generowania trasy:', error.message);
-        // Jeśli błąd pochodzi z Google Maps, zwróć go
+        console.error('Błąd w głównym bloku try-catch:', error.message);
+        // Jeśli błąd pochodzi z klienta Google Maps (np. problem z siecią)
         if (error.response && error.response.data) {
-             return res.status(500).json({ 
-                error: 'Błąd API Google Maps', 
-                details: error.response.data.error_message 
-            });
+             return res.status(500).json({
+                 error: 'Błąd API Google Maps',
+                 details: error.response.data.error_message
+             });
         }
+        // Inne, nieprzewidziane błędy serwera
         res.status(500).json({ error: 'Wewnętrzny błąd serwera', details: error.message });
     }
 });
