@@ -1,10 +1,3 @@
-Jasne, oto kompletny kod pliku server.js z zaimplementowanymi poprawkami dotyczącymi obsługi błędów z Google API.
-
-Możesz skopiować i wkleić całą zawartość poniżej bezpośrednio do swojego pliku.
-
-Plik: server.js
-JavaScript
-
 // server.js
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
