@@ -71,7 +71,9 @@ app.post('/api/routes/generate', async (req, res) => {
     },
 });
 
-        const elevations = elevationResponse.data.results.map(r => r.elevation);
+        const elevations = Array.isArray(elevationResponse.data.results) 
+    ? elevationResponse.data.results.map(r => r.elevation) 
+    : []; // Zwraca pustą tablicę, jeśli dane są niepoprawne
         const elevationGain = calculateElevationGain(elevations);
 
         // III. Zapis do Bazy Danych
