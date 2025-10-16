@@ -59,12 +59,16 @@ app.post('/api/routes/generate', async (req, res) => {
             },
         });
 
+        // Weryfikacja, czy trasa została zwrócona
+        if (!directionsResponse.data.routes || directionsResponse.data.routes.length === 0) {
+            return res.status(404).json({ error: 'Nie znaleziono trasy między podanymi punktami.' });
+        }
+
         const route = directionsResponse.data.routes[0].legs[0];
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
         const distanceMeters = route.distance.value;
 
         // II. Pobieranie Danych o Elewacji (Google Elevation API)
-        // POPRAWKA A: Użycie 'elevation' zamiast 'elevationAlongPath'
         const elevationResponse = await mapsClient.elevation({
             params: {
                 path: polyline,
@@ -73,22 +77,24 @@ app.post('/api/routes/generate', async (req, res) => {
             },
         });
 
-        // POPRAWKA B: Bezpieczne odczytywanie results z użyciem operatora zerowego łączenia (??)
-        // Zapobiega błędom 'map is not a function' jeśli 'results' jest null/undefined
-        const results = elevationResponse.data?.results ?? []; 
+        // Najbezpieczniejsze odczytanie wyników i obsługa błędu 'map is not a function'
+        const results = elevationResponse.data?.results || []; 
+        
+        let elevations = [];
+        let pathCoordinates = '';
 
-        const elevations = results.map(r => r.elevation); 
-
+        if (Array.isArray(results) && results.length > 0) {
+            elevations = results.map(r => r.elevation);
+            pathCoordinates = results.map(r => `${r.location.lng} ${r.location.lat}`).join(',');
+        } 
+        
         const elevationGain = calculateElevationGain(elevations);
 
         // III. Zapis do Bazy Danych
         const startPoint = route.start_location;
         const endPoint = route.end_location;
 
-        // Konwertowanie Polyline na format WKT dla PostGIS (LINESTRING)
-        const pathCoordinates = results.map(r => `${r.location.lng} ${r.location.lat}`).join(',');
-            
-        const lineString = `LINESTRING(${pathCoordinates})`;
+        const lineString = `LINESTRING(${pathCoordinates})`; // pathCoordinates jest teraz bezpiecznym stringiem
 
         const insertQuery = `
             INSERT INTO routes (
@@ -101,7 +107,7 @@ app.post('/api/routes/generate', async (req, res) => {
         `;
 
         const result = await db.query(insertQuery, [
-            `Trasa z ${origin} do ${destination}`, // Uproszczona nazwa
+            `Trasa z ${origin} do ${destination}`, 
             distanceMeters,
             elevationGain,
             polyline,
