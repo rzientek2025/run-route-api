@@ -2,7 +2,7 @@
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config();
-const db = require('./db'); // WAŻNE: Wymaga pliku db.js
+const db = require('./db'); 
 
 // Upewnij się, że klucz API jest dostępny jako zmienna środowiskowa
 const apiKey = process.env.GOOGLE_API_KEY; 
@@ -34,11 +34,12 @@ function calculateElevationGain(elevations) {
 
 // --- Endpointy API ---
 
+// 1. Endpoint testowy (sprawdzenie, czy serwer działa)
 app.get('/', (req, res) => {
-    res.send('API dla tras biegowych online jest aktywne! Użyj /api/routes/generate.');
+    res.send('API dla tras biegowych online jest aktywne! Użyj POST do /api/routes/generate.');
 });
 
-// Główny endpoint: Generowanie trasy i przewyższeń
+// 2. Główny endpoint: Generowanie trasy i przewyższeń
 app.post('/api/routes/generate', async (req, res) => {
     const { origin, destination, waypoints = [] } = req.body;
 
@@ -53,7 +54,7 @@ app.post('/api/routes/generate', async (req, res) => {
                 origin: origin,
                 destination: destination,
                 waypoints: waypoints,
-                mode: 'walking', 
+                mode: 'walking', // Najbliższe bieganiu
                 key: apiKey,
             },
         });
@@ -62,39 +63,35 @@ app.post('/api/routes/generate', async (req, res) => {
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
         const distanceMeters = route.distance.value;
 
-       // II. Pobieranie Danych o Elewacji (Google Elevation API)
-const elevationResponse = await mapsClient.elevation({ 
-    params: {
-        path: polyline,
-        samples: 256, 
-        key: apiKey,
-    },
-});
+        // II. Pobieranie Danych o Elewacji (Google Elevation API)
+        // POPRAWKA: Zmieniono 'elevationAlongPath' na 'elevation'
+        const elevationResponse = await mapsClient.elevation({
+            params: {
+                path: polyline,
+                samples: 256, 
+                key: apiKey,
+            },
+        });
 
-const results = elevationResponse.data.results; // Przypisanie dla czytelności
+        const results = elevationResponse.data.results; // Przypisanie dla czytelności i bezpieczeństwa
 
-// Zabezpieczamy się przed błędem "map is not a function"
-const elevations = Array.isArray(results) 
-    ? results.map(r => r.elevation) 
-    : [];
+        // POPRAWKA: Zabezpieczenie przed błędem 'map is not a function'
+        const elevations = Array.isArray(results) 
+            ? results.map(r => r.elevation) 
+            : []; 
 
-const elevationGain = calculateElevationGain(elevations);
+        const elevationGain = calculateElevationGain(elevations);
 
-// III. Zapis do Bazy Danych
-// ... reszta kodu ...
-// Konwertowanie Polyline na format WKT dla PostGIS (LINESTRING)
-// Zabezpieczamy się przed błędem "map is not a function"
-const pathCoordinates = Array.isArray(results)
-    ? results.map(r => `${r.location.lng} ${r.location.lat}`).join(',')
-    : ''; 
-
-const lineString = `LINESTRING(${pathCoordinates})`;
         // III. Zapis do Bazy Danych
         const startPoint = route.start_location;
         const endPoint = route.end_location;
-        
+
         // Konwertowanie Polyline na format WKT dla PostGIS (LINESTRING)
-        const pathCoordinates = elevationResponse.data.results.map(r => `${r.location.lng} ${r.location.lat}`).join(',');
+        // POPRAWKA: Zabezpieczenie przed błędem 'map is not a function'
+        const pathCoordinates = Array.isArray(results)
+            ? results.map(r => `${r.location.lng} ${r.location.lat}`).join(',')
+            : ''; 
+            
         const lineString = `LINESTRING(${pathCoordinates})`;
 
         const insertQuery = `
@@ -108,7 +105,7 @@ const lineString = `LINESTRING(${pathCoordinates})`;
         `;
 
         const result = await db.query(insertQuery, [
-            `Trasa z ${origin} do ${destination}`,
+            `Trasa z ${origin} do ${destination}`, // Uproszczona nazwa
             distanceMeters,
             elevationGain,
             polyline,
@@ -132,6 +129,7 @@ const lineString = `LINESTRING(${pathCoordinates})`;
 
     } catch (error) {
         console.error('Błąd podczas generowania trasy:', error.message);
+        // Jeśli błąd pochodzi z Google Maps, zwróć go
         if (error.response && error.response.data) {
              return res.status(500).json({ 
                 error: 'Błąd API Google Maps', 
