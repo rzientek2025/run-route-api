@@ -2,49 +2,43 @@
 const { Pool } = require('pg');
 require('dotenv').config(); 
 
-// 🚨 KRYTYCZNA POPRAWKA: Używamy pełnej nazwy referencyjnej DigitalOcean
-const DB_PREFIX = 'DB_POSTGRESQL_FRA1_699592'; 
-const DB_HOST_VAR = `${DB_PREFIX}_HOST`;
-const DB_PORT_VAR = `${DB_PREFIX}_PORT`;
-const DB_USER_VAR = `${DB_PREFIX}_USER`;
-const DB_PASS_VAR = `${DB_PREFIX}_PASSWORD`;
-const DB_NAME_VAR = `${DB_PREFIX}_DATABASE`;
+// 🚨 OSTATECZNA WERSJA DLA DIGITALOCEAN
+// Używa zewnętrznych danych połączeniowych (zmiennych PG_*, wprowadzonych ręcznie)
+// oraz portu 25060 i konfiguracji SSL wymaganej przez Managed Databases.
 
 const pool = new Pool({
-  // Host odczytany z poprawnej zmiennej referencyjnej App Platform
-  host: process.env[DB_HOST_VAR],
+  host: process.env.PG_HOST,
+  port: process.env.PG_PORT || 25060, // Używamy 25060 jako domyślnego portu
+  user: process.env.PG_USER, 
+  password: process.env.PG_PASSWORD, 
+  database: process.env.PG_DATABASE, 
   
-  // Port powinien być 5432 dla połączeń wewnętrznych, choć App Platform wstrzykuje 25060 do tej zmiennej
-  // Używamy zmiennej z App Platform jako źródła prawdy, jeśli jest dostępna, w przeciwnym razie 5432.
-  port: process.env[DB_PORT_VAR] || 5432, 
-  
-  // Reszta danych z poprawnych zmiennych referencyjnych
-  user: process.env[DB_USER_VAR], 
-  password: process.env[DB_PASS_VAR], 
-  database: process.env[DB_NAME_VAR], 
-  
-  // W przypadku połączeń App Platform używamy false, aby ominąć problemy z certyfikatami.
+  // Wymagane ustawienia SSL dla połączeń zewnętrznych z DigitalOcean Managed Databases
   ssl: {
     rejectUnauthorized: false 
   }
 });
 
+// Obsługa błędu połączenia (np. ECONNREFUSED)
 pool.on('error', (err) => {
-  console.error('Błąd połączenia z bazą danych:', err);
+  console.error('BŁĄD POŁĄCZENIA KRYTYCZNEGO:', err);
+  // Zatrzymujemy proces w przypadku krytycznego błędu połączenia
   process.exit(-1); 
 });
 
-// Test połączenia
+// Test połączenia przy starcie aplikacji
 pool.query('SELECT NOW()')
   .then(() => {
-    console.log('Połączenie z bazą danych DigitalOcean jest aktywne.');
+    console.log('Połączenie z bazą danych DigitalOcean jest aktywne. ✅');
   })
   .catch(err => {
-    console.error('Błąd testu połączenia z bazą:', err.stack); 
+    console.error('BŁĄD TESTU POŁĄCZENIA: ', err.stack); 
+    console.error('DIAGNOZA: Nadal występuje ECONNREFUSED. Sprawdź Firewalla bazy danych i upewnij się, że App Platform jest autoryzowane do połączeń wychodzących.');
   });
 
 
 module.exports = {
+  // Eksportujemy funkcję query do użycia w server.js
   query: (text, params) => pool.query(text, params),
   pool
 };
