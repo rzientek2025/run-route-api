@@ -1,14 +1,15 @@
-// db.js
+// db.js - OSTATECZNA, STABILNA WERSJA DLA DIGITALOCEAN Z DEDYKOWANYM IP
 const { Pool } = require('pg');
 require('dotenv').config(); 
 
-// 🚨 OSTATECZNA WERSJA DLA DIGITALOCEAN
-// Używa zewnętrznych danych połączeniowych (zmiennych PG_*, wprowadzonych ręcznie)
-// oraz portu 25060 i konfiguracji SSL wymaganej przez Managed Databases.
+// UWAGA: Ta wersja wymaga, aby zmienne PG_HOST, PG_PORT, PG_USER, PG_PASSWORD, 
+// PG_DATABASE zostały ręcznie wprowadzone do ustawień środowiskowych App Platform, 
+// używając danych zewnętrznych.
 
 const pool = new Pool({
+  // Host i dane logowania z ręcznie wprowadzonych zmiennych PG_*
   host: process.env.PG_HOST,
-  port: process.env.PG_PORT || 25060, // Używamy 25060 jako domyślnego portu
+  port: process.env.PG_PORT || 25060, // Używamy portu zewnętrznego
   user: process.env.PG_USER, 
   password: process.env.PG_PASSWORD, 
   database: process.env.PG_DATABASE, 
@@ -22,7 +23,6 @@ const pool = new Pool({
 // Obsługa błędu połączenia (np. ECONNREFUSED)
 pool.on('error', (err) => {
   console.error('BŁĄD POŁĄCZENIA KRYTYCZNEGO:', err);
-  // Zatrzymujemy proces w przypadku krytycznego błędu połączenia
   process.exit(-1); 
 });
 
@@ -30,10 +30,11 @@ pool.on('error', (err) => {
 pool.query('SELECT NOW()')
   .then(() => {
     console.log('Połączenie z bazą danych DigitalOcean jest aktywne. ✅');
+    // Jeśli to działa, oznacza to, że infrastruktura sieciowa została naprawiona
   })
   .catch(err => {
     console.error('BŁĄD TESTU POŁĄCZENIA: ', err.stack); 
-    console.error('DIAGNOZA: Nadal występuje ECONNREFUSED. Sprawdź Firewalla bazy danych i upewnij się, że App Platform jest autoryzowane do połączeń wychodzących.');
+    console.error('DIAGNOZA: Upewnij się, że statyczne adresy IP zostały poprawnie dodane do Firewalla bazy danych.');
   });
 
 
