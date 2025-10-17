@@ -2,26 +2,31 @@
 const { Pool } = require('pg');
 require('dotenv').config(); 
 
-// 🚨 KRYTYCZNA POPRAWKA: Używamy wewnętrznej nazwy komponentu jako hosta
-// To omija Firewall i zmusza App Platform do użycia prywatnej sieci.
-const INTERNAL_HOST = 'db-postgresql-fra1-699592'; 
+// 🚨 KRYTYCZNA POPRAWKA: Używamy pełnej nazwy referencyjnej DigitalOcean
+const DB_PREFIX = 'DB_POSTGRESQL_FRA1_699592'; 
+const DB_HOST_VAR = `${DB_PREFIX}_HOST`;
+const DB_PORT_VAR = `${DB_PREFIX}_PORT`;
+const DB_USER_VAR = `${DB_PREFIX}_USER`;
+const DB_PASS_VAR = `${DB_PREFIX}_PASSWORD`;
+const DB_NAME_VAR = `${DB_PREFIX}_DATABASE`;
 
 const pool = new Pool({
-  // Host to wewnętrzna nazwa komponentu (z App Platform)
-  host: INTERNAL_HOST,
+  // Host odczytany z poprawnej zmiennej referencyjnej App Platform
+  host: process.env[DB_HOST_VAR],
   
-  // Port wewnętrzny to zawsze 5432 dla PostgreSQL (a nie 25060, który jest dla zewnętrznego dostępu)
-  port: 5432, 
+  // Port powinien być 5432 dla połączeń wewnętrznych, choć App Platform wstrzykuje 25060 do tej zmiennej
+  // Używamy zmiennej z App Platform jako źródła prawdy, jeśli jest dostępna, w przeciwnym razie 5432.
+  port: process.env[DB_PORT_VAR] || 5432, 
   
-  // Używamy zmiennych wstrzykniętych przez App Platform. 
-  // Jeśli nie są to PG_, musisz je zidentyfikować. Zakładamy, że są to PG_* // lub że jest to jedyny sposób, aby kod ruszył dalej.
-  user: process.env.PG_USER || process.env.DB_USER, 
-  password: process.env.PG_PASSWORD || process.env.DB_PASSWORD, 
-  database: process.env.PG_DATABASE || process.env.DB_NAME, 
+  // Reszta danych z poprawnych zmiennych referencyjnych
+  user: process.env[DB_USER_VAR], 
+  password: process.env[DB_PASS_VAR], 
+  database: process.env[DB_NAME_VAR], 
   
-  // W przypadku połączeń wewnętrznych SSL często nie jest wymagany lub jest problematyczny.
-  // Tymczasowo go wyłączymy, aby wyeliminować kolejną przyczynę błędu ECONNREFUSED.
-  ssl: false 
+  // W przypadku połączeń App Platform używamy false, aby ominąć problemy z certyfikatami.
+  ssl: {
+    rejectUnauthorized: false 
+  }
 });
 
 pool.on('error', (err) => {
