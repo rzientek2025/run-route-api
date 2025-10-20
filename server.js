@@ -1,4 +1,4 @@
-// server.js - WERSJA FINALNA Z POPRAWKAMI I PEŁNYM LOGOWANIEM BŁĘDÓW
+// server.js - WERSJA OSTATECZNA (Poprawia o.map i loguje błędy SQL)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config();
@@ -13,10 +13,11 @@ if (!apiKey) {
 
 const mapsClient = new Client({});
 const app = express();
-const port = process.env.PORT || 8080; // Zmieniono na 8080, jak w logach
+const port = process.env.PORT || 8080; 
 
 app.use(express.json());
 
+// Funkcja pomocnicza: Obliczenie sumy przewyższeń
 function calculateElevationGain(elevations) {
     let gain = 0;
     for (let i = 1; i < elevations.length; i++) {
@@ -51,7 +52,6 @@ app.post('/api/routes/generate', async (req, res) => {
             },
         });
 
-        // WERYFIKACJA TRASY
         if (!directionsResponse.data.routes || directionsResponse.data.routes.length === 0) {
             return res.status(404).json({ error: 'Błąd API Google Maps: Nie znaleziono trasy między podanymi punktami.' });
         }
@@ -69,7 +69,8 @@ app.post('/api/routes/generate', async (req, res) => {
             },
         });
 
-        // NAPRAWA: Bezpieczny odczyt wyników (usuwa błąd o.map)
+        // 🚨 KRYTYCZNA POPRAWKA: Bezpieczny odczyt wyników (usuwa błąd o.map is not a function)
+        // Jeśli elevationResponse.data.results nie jest dostępne, używamy pustej tablicy.
         const results = elevationResponse.data?.results || []; 
         
         let elevations = [];
@@ -86,7 +87,7 @@ app.post('/api/routes/generate', async (req, res) => {
         const startPoint = route.start_location;
         const endPoint = route.end_location;
 
-        // Konstrukcja GeoJSON/WKT (Ważne dla PostGIS)
+        // Konstrukcja WKT dla PostGIS
         const lineString = pathCoordinates ? `LINESTRING(${pathCoordinates})` : 'POINT(0 0)'; 
 
         const insertQuery = `
@@ -99,7 +100,6 @@ app.post('/api/routes/generate', async (req, res) => {
             RETURNING id;
         `;
 
-        // Ważne: to zapytanie ZAKŁADA, że rozszerzenie PostGIS jest aktywne, a tabela "routes" istnieje.
         const result = await db.query(insertQuery, [
             `Trasa z ${origin} do ${destination}`, 
             distanceMeters,
@@ -124,10 +124,10 @@ app.post('/api/routes/generate', async (req, res) => {
         });
 
     } catch (error) {
-        // 🚨 KLUCZOWA POPRAWKA LOGOWANIA: logujemy CAŁY STOS BŁĘDU, aby zobaczyć błąd SQL
+        // 🚨 KRYTYCZNA POPRAWKA: Logujemy CAŁY STOS BŁĘDU (SQL lub API) do konsoli
         console.error('BŁĄD PODCZAS GENEROWANIA TRASY:', error.stack || error.message || 'Nieznany błąd');
 
-        // Obsługa błędu Google Maps (ma status HTTP w error.response)
+        // Obsługa błędu Google Maps
         if (error.response && error.response.data) {
              return res.status(500).json({ 
                 error: 'Błąd API Google Maps', 
@@ -135,7 +135,7 @@ app.post('/api/routes/generate', async (req, res) => {
             });
         }
         
-        // Obsługa błędu wewnętrznego (Baza Danych)
+        // Obsługa błędu wewnętrznego (Baza Danych lub inna logika)
         const details = error.message || error.stack?.split('\n')[0] || 'Nie udało się uzyskać szczegółów błędu.';
 
         res.status(500).json({ 
