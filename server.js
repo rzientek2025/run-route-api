@@ -1,12 +1,3 @@
-Świetnie. Aby rozwiązać problem z timeoutem w Postmanie i upewnić się, że serwer startuje natychmiast, niezależnie od szybkości połączenia z bazą danych, musimy wywołać inicjalizację bazy danych po uruchomieniu serwera.
-
-Poniżej znajduje się cały, zaktualizowany kod pliku server.js z tą kluczową modyfikacją.
-
-Pełny Kod Pliku server.js (Finalna Wersja z Odseparowaniem DB)
-Proszę zastąpić całą zawartość pliku server.js poniższym kodem:
-
-JavaScript
-
 // server.js - WERSJA FINALNA (Directions API + Zapis DB + Szybki Start)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
