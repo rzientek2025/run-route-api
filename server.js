@@ -1,10 +1,9 @@
-// server.js
+// server.js - WERSJA FINALNA Z POPRAWKAMI I PEŁNYM LOGOWANIEM BŁĘDÓW
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config();
 const db = require('./db'); 
 
-// Upewnij się, że klucz API jest dostępny jako zmienna środowiskowa
 const apiKey = process.env.GOOGLE_API_KEY; 
 
 if (!apiKey) {
@@ -14,11 +13,10 @@ if (!apiKey) {
 
 const mapsClient = new Client({});
 const app = express();
-const port = process.env.PORT || 3000; 
+const port = process.env.PORT || 8080; // Zmieniono na 8080, jak w logach
 
 app.use(express.json());
 
-// Funkcja calculateElevationGain pozostawiona, ale nieużywana
 function calculateElevationGain(elevations) {
     let gain = 0;
     for (let i = 1; i < elevations.length; i++) {
@@ -30,13 +28,10 @@ function calculateElevationGain(elevations) {
     return Math.round(gain);
 }
 
-// --- Endpointy API ---
-
 app.get('/', (req, res) => {
     res.send('API dla tras biegowych online jest aktywne! Użyj POST do /api/routes/generate.');
 });
 
-// 2. Główny endpoint: Generowanie trasy i przewyższeń
 app.post('/api/routes/generate', async (req, res) => {
     const { origin, destination, waypoints = [] } = req.body;
 
@@ -56,7 +51,7 @@ app.post('/api/routes/generate', async (req, res) => {
             },
         });
 
-        // Weryfikacja, czy trasa została poprawnie zwrócona
+        // WERYFIKACJA TRASY
         if (!directionsResponse.data.routes || directionsResponse.data.routes.length === 0) {
             return res.status(404).json({ error: 'Błąd API Google Maps: Nie znaleziono trasy między podanymi punktami.' });
         }
@@ -65,16 +60,34 @@ app.post('/api/routes/generate', async (req, res) => {
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
         const distanceMeters = route.distance.value;
 
-        // II. BLOK ELEWACJI JEST TYMCZASOWO WYŁĄCZONY
-        
-        const elevationGain = 0; // Ustawiamy 0, bo nie pobieramy elewacji
-        const pathCoordinates = ''; // Ustawiamy pusty string, bo nie pobieramy punktów elewacji
+        // II. Pobieranie Danych o Elewacji (Google Elevation API)
+        const elevationResponse = await mapsClient.elevation({
+            params: {
+                path: polyline,
+                samples: 256, 
+                key: apiKey,
+            },
+        });
 
+        // NAPRAWA: Bezpieczny odczyt wyników (usuwa błąd o.map)
+        const results = elevationResponse.data?.results || []; 
+        
+        let elevations = [];
+        let pathCoordinates = '';
+        let elevationGain = 0;
+
+        if (Array.isArray(results) && results.length > 0) {
+            elevations = results.map(r => r.elevation);
+            pathCoordinates = results.map(r => `${r.location.lng} ${r.location.lat}`).join(',');
+            elevationGain = calculateElevationGain(elevations);
+        } 
+        
         // III. Zapis do Bazy Danych
         const startPoint = route.start_location;
         const endPoint = route.end_location;
 
-        const lineString = `LINESTRING(0 0, 1 1)`; // Używamy dummy geometrii, bo pathCoordinates jest puste
+        // Konstrukcja GeoJSON/WKT (Ważne dla PostGIS)
+        const lineString = pathCoordinates ? `LINESTRING(${pathCoordinates})` : 'POINT(0 0)'; 
 
         const insertQuery = `
             INSERT INTO routes (
@@ -86,16 +99,17 @@ app.post('/api/routes/generate', async (req, res) => {
             RETURNING id;
         `;
 
+        // Ważne: to zapytanie ZAKŁADA, że rozszerzenie PostGIS jest aktywne, a tabela "routes" istnieje.
         const result = await db.query(insertQuery, [
             `Trasa z ${origin} do ${destination}`, 
             distanceMeters,
-            elevationGain, // 0
+            elevationGain,
             polyline,
             startPoint.lat,
             startPoint.lng,
             endPoint.lat,
             endPoint.lng,
-            lineString // Dummy geometria
+            lineString
         ]);
 
         // IV. Odpowiedź dla klienta
@@ -106,23 +120,31 @@ app.post('/api/routes/generate', async (req, res) => {
             start_address: route.start_address,
             end_address: route.end_address,
             polyline: polyline,
-            message: 'Trasa wygenerowana i zapisana pomyślnie. (Elewacja pominięta w tym teście)'
+            message: 'Trasa wygenerowana i zapisana pomyślnie.'
         });
 
     } catch (error) {
-        console.error('Błąd podczas generowania trasy:', error.message);
-        // Jeśli błąd pochodzi z Google Maps, zwróć go
+        // 🚨 KLUCZOWA POPRAWKA LOGOWANIA: logujemy CAŁY STOS BŁĘDU, aby zobaczyć błąd SQL
+        console.error('BŁĄD PODCZAS GENEROWANIA TRASY:', error.stack || error.message || 'Nieznany błąd');
+
+        // Obsługa błędu Google Maps (ma status HTTP w error.response)
         if (error.response && error.response.data) {
              return res.status(500).json({ 
                 error: 'Błąd API Google Maps', 
                 details: error.response.data.error_message 
             });
         }
-        res.status(500).json({ error: 'Wewnętrzny błąd serwera', details: error.message });
+        
+        // Obsługa błędu wewnętrznego (Baza Danych)
+        const details = error.message || error.stack?.split('\n')[0] || 'Nie udało się uzyskać szczegółów błędu.';
+
+        res.status(500).json({ 
+            error: 'Wewnętrzny błąd serwera', 
+            details: details
+        });
     }
 });
 
-// Uruchomienie serwera
 app.listen(port, () => {
   console.log(`Serwer Node.js nasłuchuje na porcie ${port} - Online.`);
 });
