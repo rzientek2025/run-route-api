@@ -1,9 +1,8 @@
-// server.js - WERSJA 3: Directions + Elevation (Test Fixu na o.map)
+// server.js - WERSJA MONOLITYCZNA (FINALNY TEST)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config(); 
-// Moduł db.js jest wciąż ZAMKNIĘTY
-const db = require('./db'); 
+// Moduł PG/DB jest tutaj celowo POMINIĘTY, aby wykluczyć błędy połączeń.
 
 const apiKey = process.env.GOOGLE_API_KEY; 
 
@@ -21,6 +20,7 @@ app.use(express.json());
 // Funkcja pomocnicza: Obliczenie sumy przewyższeń
 function calculateElevationGain(elevations) {
     let gain = 0;
+    // Używamy tradycyjnej pętli FOR, aby wykluczyć, że to .map jest problemem
     for (let i = 1; i < elevations.length; i++) {
         const diff = elevations[i] - elevations[i - 1];
         if (diff > 0) {
@@ -31,7 +31,7 @@ function calculateElevationGain(elevations) {
 }
 
 app.get('/', (req, res) => {
-    res.send('API działa. Użyj POST do /api/routes/generate.');
+    res.send('API działa w trybie monolitycznym.');
 });
 
 app.post('/api/routes/generate', async (req, res) => {
@@ -68,32 +68,34 @@ app.post('/api/routes/generate', async (req, res) => {
             },
         });
 
-        // 🚨 KRYTYCZNY FIX: ZABEZPIECZENIE PRZED BŁĘDEM o.map is not a function
+        // 🚨 OSTATECZNY FIX (Monolit): Zabezpieczenie przed błędem cache'u
+        // Zapewniamy, że results jest PUSTĄ TABLICĄ, jeśli API zwróci coś nieprawidłowego.
         const results = elevationResponse.data?.results || []; 
         
         let elevationGain = 0;
         let resultCount = 0;
 
+        // Sprawdzamy, czy to jest PRAWIDŁOWA tablica przed mapowaniem
         if (Array.isArray(results) && results.length > 0) {
-            const elevations = results.map(r => r.elevation);
+            // Używamy .map tylko, jeśli mamy 100% pewności, że results jest tablicą
+            const elevations = results.map(r => r.elevation); 
             elevationGain = calculateElevationGain(elevations);
             resultCount = results.length;
-            console.log(`DEBUG: Użyto zabezpieczenia i obliczono przewyższenie.`);
+            console.log(`DEBUG: Elewacja obliczona pomyślnie. Wyników: ${resultCount}`);
         } else {
-             console.log(`DEBUG: Użyto zabezpieczenia. Elewacja niedostępna, przewyższenie 0.`);
+             console.log(`DEBUG: Błąd Elewacji - dane były puste/nieprawidłowe. Przewyższenie: 0.`);
         }
         
-        // Zwracamy wynik z elewacją, ale bez bazy danych.
+        // Zwracamy wynik z elewacją
         res.status(200).json({
             status: 'Sukces',
             distance_km: (distanceMeters / 1000).toFixed(2),
             elevation_gain_m: elevationGain,
-            polyline_length: polyline.length,
-            debug_elevation_results: resultCount,
-            message: 'Trasa i elewacja wyznaczone pomyślnie (NIE zapisano do bazy danych).'
+            message: 'Trasa i elewacja wyznaczone pomyślnie w trybie monolitycznym.'
         });
 
     } catch (error) {
+        // ... (obsługa błędów pozostaje taka sama)
         console.error('BŁĄD PODCZAS GENEROWANIA TRASY:', error.stack || error.message);
         
         if (error.response && error.response.data) {
