@@ -1,10 +1,9 @@
-// server.js - WERSJA TYLKO DIRECTIONS (BEZ DB)
+// server.js - WERSJA TYLKO DIRECTIONS (BEZ DB, Z CORS)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config(); 
 
-// UWAGA: Usunięto odwołanie do db.js i pg
-
+// UWAGA: Moduł db.js jest usunięty
 const apiKey = process.env.GOOGLE_API_KEY; 
 
 if (!apiKey) {
@@ -16,13 +15,29 @@ const mapsClient = new Client({});
 const app = express();
 const port = process.env.PORT || 8080; 
 
+// 🚨 IMPLEMENTACJA CORS: Akceptowanie żądań z dowolnej domeny
+app.use((req, res, next) => {
+    // Zezwalaj na żądania z dowolnej domeny (*)
+    res.setHeader('Access-Control-Allow-Origin', '*'); 
+    // Zezwalaj na metody GET, POST
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    // Zezwalaj na nagłówki Content-Type
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); 
+    
+    // Obsługa preflight request (wymagane przez POST)
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
 app.use(express.json());
 
 app.get('/', (req, res) => {
     res.send('API działa. Użyj POST do /api/routes/generate, aby wyznaczyć trasę.');
 });
 
-// Endpoint wyznaczający tylko trasę (niezapisujący do bazy)
+// Endpoint wyznaczający tylko trasę
 app.post('/api/routes/generate', async (req, res) => {
     const { origin, destination } = req.body;
 
