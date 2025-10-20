@@ -1,8 +1,10 @@
-// server.js - WERSJA MONOLITYCZNA (FINALNY TEST)
+// server.js - WERSJA 4: Directions API + Zapis do DB (Bez Elewacji)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config(); 
-// Moduł PG/DB jest tutaj celowo POMINIĘTY, aby wykluczyć błędy połączeń.
+
+// Moduł DB jest TERAZ AKTYWNY
+const db = require('./db'); 
 
 const apiKey = process.env.GOOGLE_API_KEY; 
 
@@ -17,21 +19,8 @@ const port = process.env.PORT || 8080;
 
 app.use(express.json());
 
-// Funkcja pomocnicza: Obliczenie sumy przewyższeń
-function calculateElevationGain(elevations) {
-    let gain = 0;
-    // Używamy tradycyjnej pętli FOR, aby wykluczyć, że to .map jest problemem
-    for (let i = 1; i < elevations.length; i++) {
-        const diff = elevations[i] - elevations[i - 1];
-        if (diff > 0) {
-            gain += diff;
-        }
-    }
-    return Math.round(gain);
-}
-
 app.get('/', (req, res) => {
-    res.send('API działa w trybie monolitycznym.');
+    res.send('API działa. Użyj POST do /api/routes/generate, aby zapisać trasę.');
 });
 
 app.post('/api/routes/generate', async (req, res) => {
@@ -56,58 +45,49 @@ app.post('/api/routes/generate', async (req, res) => {
             return res.status(404).json({ error: 'Nie znaleziono trasy.' });
         }
         
-        const distanceMeters = directionsResponse.data.routes[0].legs[0].distance.value;
+        const route = directionsResponse.data.routes[0].legs[0];
+        const distanceKm = (route.distance.value / 1000).toFixed(2);
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
-
-        // II. POBIERANIE ELEWACJI
-        const elevationResponse = await mapsClient.elevation({
-            params: {
-                path: polyline,
-                samples: 256, 
-                key: apiKey,
-            },
-        });
-
-        // 🚨 OSTATECZNY FIX (Monolit): Zabezpieczenie przed błędem cache'u
-        // Zapewniamy, że results jest PUSTĄ TABLICĄ, jeśli API zwróci coś nieprawidłowego.
-        const results = elevationResponse.data?.results || []; 
         
-        let elevationGain = 0;
-        let resultCount = 0;
-
-        // Sprawdzamy, czy to jest PRAWIDŁOWA tablica przed mapowaniem
-        if (Array.isArray(results) && results.length > 0) {
-            // Używamy .map tylko, jeśli mamy 100% pewności, że results jest tablicą
-            const elevations = results.map(r => r.elevation); 
-            elevationGain = calculateElevationGain(elevations);
-            resultCount = results.length;
-            console.log(`DEBUG: Elewacja obliczona pomyślnie. Wyników: ${resultCount}`);
-        } else {
-             console.log(`DEBUG: Błąd Elewacji - dane były puste/nieprawidłowe. Przewyższenie: 0.`);
-        }
+        // Konwersja polilinii na GeoJSON (potrzebne do ST_GeomFromText)
+        const steps = directionsResponse.data.routes[0].legs[0].steps;
+        const lineStringCoords = steps.map(step => {
+            return `${step.end_location.lng} ${step.end_location.lat}`;
+        }).join(',');
         
-        // Zwracamy wynik z elewacją
-        res.status(200).json({
-            status: 'Sukces',
-            distance_km: (distanceMeters / 1000).toFixed(2),
-            elevation_gain_m: elevationGain,
-            message: 'Trasa i elewacja wyznaczone pomyślnie w trybie monolitycznym.'
+        const geometry = `ST_GeomFromText('LINESTRING(${lineStringCoords})', 4326)`;
+
+        // II. Zapis do Bazy Danych
+        const saveQuery = `
+            INSERT INTO routes (distance_km, polyline, geom) 
+            VALUES ($1, $2, ${geometry}) 
+            RETURNING id;
+        `;
+        
+        const result = await db.query(saveQuery, [distanceKm, polyline]);
+        const routeId = result.rows[0].id;
+        
+        // Zwracamy wynik
+        res.status(201).json({
+            status: 'Trasa Zapisana',
+            id: routeId,
+            distance_km: distanceKm,
+            message: 'Trasa wyznaczona i pomyślnie zapisana do bazy danych (bez elewacji).'
         });
 
     } catch (error) {
-        // ... (obsługa błędów pozostaje taka sama)
-        console.error('BŁĄD PODCZAS GENEROWANIA TRASY:', error.stack || error.message);
+        console.error('BŁĄD PODCZAS PRZETWARZANIA TRASY:', error.stack || error.message);
         
+        let details = error.message;
         if (error.response && error.response.data) {
-             return res.status(500).json({ 
-                error: 'Błąd API Google Maps', 
-                details: error.response.data.error_message 
-            });
+             details = error.response.data.error_message;
+        } else if (error.code === '42P01') {
+             details = 'Błąd SQL: Tabela lub schemat nie istnieje (sprawdź, czy PostGIS jest włączony).';
         }
         
         res.status(500).json({ 
             error: 'Wewnętrzny błąd serwera', 
-            details: error.message
+            details: details
         });
     }
 });
