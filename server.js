@@ -145,4 +145,5 @@ app.post('/api/routes/generate', async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Serwer Node.js nasłuchuje na porcie ${port} -
+  console.log(`Serwer Node.js nasłuchuje na porcie ${port} - Online.`);
+});
