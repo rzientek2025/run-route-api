@@ -1,35 +1,35 @@
-// db.js - OSTATECZNA WERSJA WEWNĘTRZNA
+// db.js - OSTATECZNA WERSJA PUBLICZNA (Zalecana przez Support)
 const { Pool } = require('pg');
 require('dotenv').config(); 
 
-// Zmienna z NAZWĄ KOMPONENTU Twojej bazy danych
-const INTERNAL_HOST = 'db-postgresql-fra1-699592'; 
+// Pełny Host Publiczny i Port (Zgodnie z wymogami Managed Database)
+const PUBLIC_HOST = 'db-postgresql-fra1-69959-do-user-27616447-0.i.db.ondigitalocean.com'; 
+const PUBLIC_PORT = 25060;
 
 const pool = new Pool({
-  // Host: Używamy wewnętrznej nazwy komponentu
-  host: INTERNAL_HOST,
+  // Używamy pełnej nazwy hosta i poprawnego portu
+  host: PUBLIC_HOST,
+  port: PUBLIC_PORT, 
   
-  // Port: Używamy wewnętrznego portu PostgreSQL
-  port: 5432, 
-  
-  // App Platform automatycznie wstrzykuje te zmienne
-  user: process.env.PG_USER || process.env.DB_USER || 'doadmin', 
-  password: process.env.PG_PASSWORD || process.env.DB_PASSWORD, 
+  // Zakładamy, że ustawiłeś te zmienne środowiskowe w App Platform
+  user: process.env.PG_USER || 'doadmin', 
+  password: process.env.PG_PASSWORD, 
   database: process.env.PG_DATABASE || 'defaultdb', 
   
-  // SSL wyłączony dla połączenia wewnętrznego
-  ssl: false 
+  // SSL jest WŁĄCZONY dla połączenia publicznego, które jest bezpieczniejsze
+  ssl: {
+    rejectUnauthorized: false // Wymagane, jeśli certyfikat nie jest w systemie
+  }
 });
 
 // Test połączenia przy starcie aplikacji
 pool.query('SELECT NOW()')
   .then(() => {
-    console.log('Połączenie WEWNĘTRZNE z bazą danych jest STABILNE. ✅');
+    console.log('Połączenie PUBLICZNE z bazą danych jest AKTYWNE. ✅');
   })
   .catch(err => {
-    // Logujemy cały stos błędu, by zobaczyć problem z routingiem/DNS
-    console.error('BŁĄD TESTU POŁĄCZENIA:', err.stack); 
-    console.error('DIAGNOZA: Błąd połączenia wewnętrznego - Zgłoś do supportu problem z routingiem App Platform.');
+    console.error('BŁĄD KRYTYCZNY POŁĄCZENIA:', err.stack); 
+    console.error('DIAGNOZA: Sprawdź Firewall bazy danych. Musi zawierać statyczne adresy IP aplikacji (Egress IPs).');
   });
 
 
