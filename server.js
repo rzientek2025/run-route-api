@@ -1,4 +1,4 @@
-// server.js - WERSJA OSTATECZNA (Poprawia o.map, loguje błędy SQL, gotowa do pracy)
+// server.js - WERSJA OSTATECZNA (Fix na o.map i pełne logowanie)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config();
@@ -17,7 +17,6 @@ const port = process.env.PORT || 8080;
 
 app.use(express.json());
 
-// Funkcja pomocnicza: Obliczenie sumy przewyższeń
 function calculateElevationGain(elevations) {
     let gain = 0;
     for (let i = 1; i < elevations.length; i++) {
@@ -70,6 +69,7 @@ app.post('/api/routes/generate', async (req, res) => {
         });
 
         // 🚨 KRYTYCZNA POPRAWKA: Bezpieczny odczyt wyników (usuwa błąd o.map is not a function)
+        // Jeśli 'results' jest null/undefined (np. błąd API), używamy pustej tablicy ([]), aby kod nie crashował.
         const results = elevationResponse.data?.results || []; 
         
         let elevations = [];
@@ -86,7 +86,6 @@ app.post('/api/routes/generate', async (req, res) => {
         const startPoint = route.start_location;
         const endPoint = route.end_location;
 
-        // Konstrukcja WKT dla PostGIS
         const lineString = pathCoordinates ? `LINESTRING(${pathCoordinates})` : 'POINT(0 0)'; 
 
         const insertQuery = `
@@ -99,6 +98,7 @@ app.post('/api/routes/generate', async (req, res) => {
             RETURNING id;
         `;
 
+        // ZAKŁADA, że tabela 'routes' i rozszerzenie PostGIS są aktywne.
         const result = await db.query(insertQuery, [
             `Trasa z ${origin} do ${destination}`, 
             distanceMeters,
@@ -123,8 +123,8 @@ app.post('/api/routes/generate', async (req, res) => {
         });
 
     } catch (error) {
-        // 🚨 KRYTYCZNA POPRAWKA: Logujemy CAŁY STOS BŁĘDU (SQL lub API) do konsoli
-        console.error('BŁĄD PODCZAS GENEROWANIA TRASY:', error.stack || error.message || 'Nieznany błąd');
+        // 🚨 PEŁNE LOGOWANIE: Logujemy CAŁY STOS BŁĘDU (w tym błędy SQL)
+        console.error('BŁĄD PODCZAS GENEROWANIA TRASY (DIAGNOSTYKA):', error.stack || error.message || 'Nieznany błąd');
 
         // Obsługa błędu Google Maps
         if (error.response && error.response.data) {
@@ -135,7 +135,6 @@ app.post('/api/routes/generate', async (req, res) => {
         }
         
         // Obsługa błędu wewnętrznego (Baza Danych lub inna logika)
-        // Ta linia zwraca szczegóły błędu zamiast pustego ciągu
         const details = error.message || error.stack?.split('\n')[0] || 'Nie udało się uzyskać szczegółów błędu.';
 
         res.status(500).json({ 
@@ -146,5 +145,4 @@ app.post('/api/routes/generate', async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Serwer Node.js nasłuchuje na porcie ${port} - Online.`);
-});
+  console.log(`Serwer Node.js nasłuchuje na porcie ${port} -
