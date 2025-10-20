@@ -3,10 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wyznaczanie Trasy - Frontend</title>
+    <title>Wyznaczanie Trasy i Mapa</title>
+    
+    <script async
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAW2DUptV5TFogXHiIDBXCbDlHIK9tPtaM&callback=initMap&libraries=geometry">
+    </script>
+    
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         h1 { color: #333; text-align: center; }
         label { display: block; margin-top: 10px; font-weight: bold; }
         input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
@@ -18,6 +23,13 @@
         button:hover { background-color: #0056b3; }
         #results { margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
         .error { color: #dc3545; font-weight: bold; }
+        #map {
+            height: 400px; /* Określ wysokość kontenera mapy */
+            width: 100%;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -26,24 +38,37 @@
 
         <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
         
-        <label for="origin">Punkt Początkowy (Lat,Lng lub Adres):</label>
-        <input type="text" id="origin" value="40.7128,-74.0060" placeholder="np. 40.7128,-74.0060">
+        <label for="origin">Punkt Początkowy (Adres lub Lat,Lng):</label>
+        <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa">
 
-        <label for="destination">Punkt Końcowy (Lat,Lng lub Adres):</label>
-        <input type="text" id="destination" value="40.730610,-73.935242" placeholder="np. 40.730610,-73.935242">
+        <label for="destination">Punkt Końcowy (Adres lub Lat,Lng):</label>
+        <input type="text" id="destination" value="Ogród Saski, Warszawa" placeholder="np. Ogród Saski, Warszawa">
 
-        <button onclick="generateRoute()">Wyznacz Trasę</button>
+        <button onclick="generateRoute()">Wyznacz Trasę i Pokaż na Mapie</button>
 
-        <h2>Wyniki:</h2>
+        <h2>Wyniki Tekstowe:</h2>
         <div id="results">Czekam na dane...</div>
+        
+        <div id="map"></div>
     </div>
 
     <script>
+        let map; // Globalna zmienna dla obiektu mapy
+        let routePolyline; // Globalna zmienna do przechowywania aktualnej trasy
+
+        // Funkcja inicjalizująca mapę (wywoływana przez API Google)
+        function initMap() {
+            // Ustawiamy domyślne centrum mapy (np. centrum Warszawy)
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 52.23, lng: 21.01 },
+                zoom: 12,
+            });
+        }
+        
         async function generateRoute() {
             const apiUrlElement = document.getElementById('api-url');
             const apiUrl = apiUrlElement.value;
             
-            // 🚨 Sprawdzenie adresu URL
             if (apiUrl.includes("TWOJ_ADRES_URL_API_TUTAJ")) {
                 document.getElementById('results').innerHTML = '<span class="error">BŁĄD: Musisz zaktualizować wartość "api-url" w kodzie HTML o swój adres URL API.</span>';
                 return;
@@ -54,13 +79,15 @@
             const resultsDiv = document.getElementById('results');
             
             resultsDiv.innerHTML = "Wysyłam zapytanie do API...";
+            // Usuwamy starą trasę, jeśli istnieje
+            if (routePolyline) {
+                routePolyline.setMap(null);
+            }
 
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ origin, destination })
                 });
 
@@ -71,17 +98,50 @@
                     return;
                 }
 
-                // Sukces
+                // Sukces: Wyświetlenie danych tekstowych
                 resultsDiv.innerHTML = `
                     <p style="color:#28a745; font-weight: bold;">STATUS: ${data.status}</p>
                     <p><strong>Dystans:</strong> ${data.distance_km} km</p>
                     <p><strong>Message:</strong> ${data.message}</p>
                     <p><strong>Poliline (Fragment):</strong> ${data.polyline.substring(0, 50)}... [${data.polyline.length} znaków]</p>
                 `;
+                
+                // RYSOWANIE TRASY NA MAPIE
+                drawRoute(data.polyline);
 
             } catch (error) {
                 resultsDiv.innerHTML = `<span class="error">BŁĄD SIECI: Nie udało się połączyć z API.</span>\nSprawdź, czy serwer działa i adres URL jest poprawny.\nSzczegóły: ${error.message}`;
             }
+        }
+        
+        // Funkcja do rysowania trasy na mapie
+        function drawRoute(encodedPolyline) {
+            if (!map) {
+                console.error("Mapa nie została zainicjowana. Sprawdź, czy klucz API jest poprawny.");
+                return;
+            }
+            
+            // 1. Zdekodowanie polilinii z formatu Google
+            const path = google.maps.geometry.encoding.decodePath(encodedPolyline);
+
+            // 2. Tworzenie obiektu polilinii
+            routePolyline = new google.maps.Polyline({
+                path: path,
+                geodesic: true,
+                strokeColor: '#FF0000', // Kolor czerwony
+                strokeOpacity: 1.0,
+                strokeWeight: 4
+            });
+
+            // 3. Dodanie trasy do mapy
+            routePolyline.setMap(map);
+
+            // 4. Dopasowanie widoku mapy do całej trasy
+            const bounds = new google.maps.LatLngBounds();
+            for (let i = 0; i < path.length; i++) {
+                bounds.extend(path[i]);
+            }
+            map.fitBounds(bounds);
         }
     </script>
 </body>
