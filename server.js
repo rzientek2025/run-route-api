@@ -1,9 +1,8 @@
-// server.js - WERSJA 2: Test Google API i Fix na o.map
+// server.js - WERSJA SUPER PROSTA (TYLKO Directions API)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config(); 
-// Moduł db.js jest wciąż ZAMKNIĘTY (wykluczamy błędy DB)
-const db = require('./db'); 
+const db = require('./db'); // Nadal go importujemy, ale jest nieaktywny
 
 const apiKey = process.env.GOOGLE_API_KEY; 
 
@@ -19,17 +18,10 @@ const port = process.env.PORT || 8080;
 app.use(express.json());
 
 app.get('/', (req, res) => {
-    res.send('Serwer Node.js jest online i działa poprawnie! 🎉');
+    res.send('API działa. Użyj POST do /api/routes/generate.');
 });
 
-// Zostawiamy dla testów
-app.post('/api/test', (req, res) => {
-    res.status(200).json({
-        status: 'OK',
-        message: 'Serwer poprawnie odebrał POST.'
-    });
-});
-
+// Główny, uproszczony endpoint
 app.post('/api/routes/generate', async (req, res) => {
     const { origin, destination } = req.body;
 
@@ -38,7 +30,7 @@ app.post('/api/routes/generate', async (req, res) => {
     }
 
     try {
-        // I. Generowanie Trasy (Google Directions API)
+        // WYŁĄCZNIE Generowanie Trasy (Google Directions API)
         const directionsResponse = await mapsClient.directions({
             params: {
                 origin: origin,
@@ -52,35 +44,21 @@ app.post('/api/routes/generate', async (req, res) => {
             return res.status(404).json({ error: 'Nie znaleziono trasy.' });
         }
         
-        const distanceMeters = directionsResponse.data.routes[0].legs[0].distance.value;
+        const route = directionsResponse.data.routes[0].legs[0];
+        const distanceMeters = route.distance.value;
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
 
-        // II. Zabezpieczony test (Fix na o.map) - wykonujemy puste zapytanie, by sprawdzić
-        const elevationResponse = await mapsClient.elevation({
-            params: {
-                path: polyline,
-                samples: 2, // Minimalna liczba próbek
-                key: apiKey,
-            },
-        });
-
-        // 🚨 KRYTYCZNY TEST FIXA: Używamy pustej tablicy, aby upewnić się, że błąd nie wróci
-        const results = elevationResponse.data?.results || []; 
-        console.log(`Debug: Odebrano ${results.length} wyników elewacji.`);
-
-        // Zamiast zapisywać do bazy, po prostu zwracamy wynik.
+        // Prosty wynik
         res.status(200).json({
+            status: 'Sukces',
             distance_km: (distanceMeters / 1000).toFixed(2),
-            polyline_length: polyline.length,
-            message: 'Trasa pomyślnie wygenerowana (NIE zapisano do bazy danych).',
-            // Pokazujemy wyniki API
-            test_results: results.length
+            polyline: polyline,
+            message: 'Trasa wyznaczona pomyślnie (minimalna wersja).'
         });
 
     } catch (error) {
-        console.error('BŁĄD PODCZAS GENEROWANIA TRASY:', error.stack || error.message);
+        console.error('BŁĄD W TRAKCIE GENEROWANIA TRASY:', error.stack || error.message);
         
-        // Błąd API Google Maps
         if (error.response && error.response.data) {
              return res.status(500).json({ 
                 error: 'Błąd API Google Maps', 
