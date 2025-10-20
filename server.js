@@ -1,10 +1,9 @@
-// server.js - WERSJA FINALNA (Directions API + Zapis DB + Szybki Start)
+// server.js - WERSJA TYLKO DIRECTIONS (BEZ DB)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config(); 
 
-// Moduł DB jest aktywny
-const db = require('./db'); 
+// UWAGA: Usunięto odwołanie do db.js i pg
 
 const apiKey = process.env.GOOGLE_API_KEY; 
 
@@ -20,9 +19,10 @@ const port = process.env.PORT || 8080;
 app.use(express.json());
 
 app.get('/', (req, res) => {
-    res.send('API działa. Użyj POST do /api/routes/generate, aby zapisać trasę.');
+    res.send('API działa. Użyj POST do /api/routes/generate, aby wyznaczyć trasę.');
 });
 
+// Endpoint wyznaczający tylko trasę (niezapisujący do bazy)
 app.post('/api/routes/generate', async (req, res) => {
     const { origin, destination } = req.body;
 
@@ -48,55 +48,32 @@ app.post('/api/routes/generate', async (req, res) => {
         const route = directionsResponse.data.routes[0].legs[0];
         const distanceKm = (route.distance.value / 1000).toFixed(2);
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
-        
-        // Konwersja polilinii na GeoJSON
-        const steps = directionsResponse.data.routes[0].legs[0].steps;
-        const lineStringCoords = steps.map(step => {
-            return `${step.end_location.lng} ${step.end_location.lat}`;
-        }).join(',');
-        
-        const geometry = `ST_GeomFromText('LINESTRING(${lineStringCoords})', 4326)`;
 
-        // II. Zapis do Bazy Danych
-        const saveQuery = `
-            INSERT INTO routes (distance_km, polyline, geom) 
-            VALUES ($1, $2, ${geometry}) 
-            RETURNING id;
-        `;
-        
-        const result = await db.query(saveQuery, [distanceKm, polyline]);
-        const routeId = result.rows[0].id;
-        
-        // Zwracamy wynik
-        res.status(201).json({
-            status: 'Trasa Zapisana',
-            id: routeId,
+        // Prosty wynik
+        res.status(200).json({
+            status: 'Sukces',
             distance_km: distanceKm,
-            message: 'Trasa wyznaczona i pomyślnie zapisana do bazy danych (bez elewacji).'
+            polyline: polyline,
+            message: 'Trasa wyznaczona pomyślnie (minimalna wersja).'
         });
 
     } catch (error) {
-        console.error('BŁĄD PODCZAS PRZETWARZANIA TRASY:', error.stack || error.message);
+        console.error('BŁĄD W TRAKCIE GENEROWANIA TRASY:', error.stack || error.message);
         
-        let details = error.message;
         if (error.response && error.response.data) {
-             details = error.response.data.error_message;
-        } else if (error.code === '42P01') {
-             details = 'Błąd SQL: Tabela lub schemat nie istnieje (sprawdź, czy PostGIS jest włączony).';
+             return res.status(500).json({ 
+                error: 'Błąd API Google Maps', 
+                details: error.response.data.error_message 
+            });
         }
         
         res.status(500).json({ 
             error: 'Wewnętrzny błąd serwera', 
-            details: details
+            details: error.message
         });
     }
 });
 
 app.listen(port, () => {
   console.log(`Serwer Node.js nasłuchuje na porcie ${port} - Online.`);
-  
-  // 🚨 KRYTYCZNA MODYFIKACJA: Inicjalizacja bazy danych PO starcie serwera, aby uniknąć timeoutu.
-  if (db.initDB) {
-      db.initDB();
-  }
 });
