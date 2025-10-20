@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wyznaczanie Trasy - Frontend</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { 
+            display: block; width: 100%; padding: 10px; margin-top: 20px; 
+            background-color: #007bff; color: white; border: none; border-radius: 4px; 
+            cursor: pointer; font-size: 16px; transition: background-color 0.3s;
+        }
+        button:hover { background-color: #0056b3; }
+        #results { margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
+        .error { color: #dc3545; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Wyznaczanie Trasy (Directions API)</h1>
+
+        <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
+        
+        <label for="origin">Punkt Początkowy (Lat,Lng lub Adres):</label>
+        <input type="text" id="origin" value="40.7128,-74.0060" placeholder="np. 40.7128,-74.0060">
+
+        <label for="destination">Punkt Końcowy (Lat,Lng lub Adres):</label>
+        <input type="text" id="destination" value="40.730610,-73.935242" placeholder="np. 40.730610,-73.935242">
+
+        <button onclick="generateRoute()">Wyznacz Trasę</button>
+
+        <h2>Wyniki:</h2>
+        <div id="results">Czekam na dane...</div>
+    </div>
+
+    <script>
+        async function generateRoute() {
+            const apiUrlElement = document.getElementById('api-url');
+            const apiUrl = apiUrlElement.value;
+            
+            // 🚨 Sprawdzenie adresu URL
+            if (apiUrl.includes("TWOJ_ADRES_URL_API_TUTAJ")) {
+                document.getElementById('results').innerHTML = '<span class="error">BŁĄD: Musisz zaktualizować wartość "api-url" w kodzie HTML o swój adres URL API.</span>';
+                return;
+            }
+
+            const origin = document.getElementById('origin').value;
+            const destination = document.getElementById('destination').value;
+            const resultsDiv = document.getElementById('results');
+            
+            resultsDiv.innerHTML = "Wysyłam zapytanie do API...";
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ origin, destination })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    resultsDiv.innerHTML = `<span class="error">BŁĄD: ${data.error || 'Nieznany błąd'}</span>\nSzczegóły: ${data.details || 'Brak'}`;
+                    return;
+                }
+
+                // Sukces
+                resultsDiv.innerHTML = `
+                    <p style="color:#28a745; font-weight: bold;">STATUS: ${data.status}</p>
+                    <p><strong>Dystans:</strong> ${data.distance_km} km</p>
+                    <p><strong>Message:</strong> ${data.message}</p>
+                    <p><strong>Poliline (Fragment):</strong> ${data.polyline.substring(0, 50)}... [${data.polyline.length} znaków]</p>
+                `;
+
+            } catch (error) {
+                resultsDiv.innerHTML = `<span class="error">BŁĄD SIECI: Nie udało się połączyć z API.</span>\nSprawdź, czy serwer działa i adres URL jest poprawny.\nSzczegóły: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
