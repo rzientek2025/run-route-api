@@ -1,9 +1,18 @@
-// server.js - WERSJA 4: Directions API + Zapis do DB (Bez Elewacji)
+Świetnie. Aby rozwiązać problem z timeoutem w Postmanie i upewnić się, że serwer startuje natychmiast, niezależnie od szybkości połączenia z bazą danych, musimy wywołać inicjalizację bazy danych po uruchomieniu serwera.
+
+Poniżej znajduje się cały, zaktualizowany kod pliku server.js z tą kluczową modyfikacją.
+
+Pełny Kod Pliku server.js (Finalna Wersja z Odseparowaniem DB)
+Proszę zastąpić całą zawartość pliku server.js poniższym kodem:
+
+JavaScript
+
+// server.js - WERSJA FINALNA (Directions API + Zapis DB + Szybki Start)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config(); 
 
-// Moduł DB jest TERAZ AKTYWNY
+// Moduł DB jest aktywny
 const db = require('./db'); 
 
 const apiKey = process.env.GOOGLE_API_KEY; 
@@ -49,7 +58,7 @@ app.post('/api/routes/generate', async (req, res) => {
         const distanceKm = (route.distance.value / 1000).toFixed(2);
         const polyline = directionsResponse.data.routes[0].overview_polyline.points;
         
-        // Konwersja polilinii na GeoJSON (potrzebne do ST_GeomFromText)
+        // Konwersja polilinii na GeoJSON
         const steps = directionsResponse.data.routes[0].legs[0].steps;
         const lineStringCoords = steps.map(step => {
             return `${step.end_location.lng} ${step.end_location.lat}`;
@@ -94,4 +103,9 @@ app.post('/api/routes/generate', async (req, res) => {
 
 app.listen(port, () => {
   console.log(`Serwer Node.js nasłuchuje na porcie ${port} - Online.`);
+  
+  // 🚨 KRYTYCZNA MODYFIKACJA: Inicjalizacja bazy danych PO starcie serwera, aby uniknąć timeoutu.
+  if (db.initDB) {
+      db.initDB();
+  }
 });
