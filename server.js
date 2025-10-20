@@ -1,4 +1,4 @@
-// server.js - WERSJA OSTATECZNA (Poprawia o.map i loguje błędy SQL)
+// server.js - WERSJA OSTATECZNA (Poprawia o.map, loguje błędy SQL, gotowa do pracy)
 const express = require('express');
 const { Client } = require('@googlemaps/google-maps-services-js');
 require('dotenv').config();
@@ -70,7 +70,6 @@ app.post('/api/routes/generate', async (req, res) => {
         });
 
         // 🚨 KRYTYCZNA POPRAWKA: Bezpieczny odczyt wyników (usuwa błąd o.map is not a function)
-        // Jeśli elevationResponse.data.results nie jest dostępne, używamy pustej tablicy.
         const results = elevationResponse.data?.results || []; 
         
         let elevations = [];
@@ -136,6 +135,7 @@ app.post('/api/routes/generate', async (req, res) => {
         }
         
         // Obsługa błędu wewnętrznego (Baza Danych lub inna logika)
+        // Ta linia zwraca szczegóły błędu zamiast pustego ciągu
         const details = error.message || error.stack?.split('\n')[0] || 'Nie udało się uzyskać szczegółów błędu.';
 
         res.status(500).json({ 
