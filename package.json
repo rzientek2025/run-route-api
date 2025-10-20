@@ -1,6 +1,6 @@
 {
   "name": "run-route-api",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "API for calculating and storing running routes using Google Maps and PostGIS.",
   "main": "server.js",
   "scripts": {
