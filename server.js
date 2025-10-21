@@ -38,7 +38,7 @@ app.get('/', (req, res) => {
 });
 
 // Endpoint wyznaczający tylko trasę
-app.post('/api/routes/generate', async (req, res) => {
+app.post('/routes/generate', async (req, res) => {
     const { origin, destination } = req.body;
 
     if (!origin || !destination) {
