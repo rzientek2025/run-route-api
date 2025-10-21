@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wyznaczanie Trasy i Mapa</title>
     
+    <script async
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAW2DUptV5TFogXHiIDBXCbDlHIK9tPtaM&callback=initMap&libraries=geometry">
+    </script>
+    
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
         .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
@@ -32,7 +36,7 @@
     <div class="container">
         <h1>Wyznaczanie Trasy i Mapa</h1>
 
-        <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
+        <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/run-route-api2/api/routes/generate">
         
         <label for="origin">Punkt Początkowy (Adres lub Lat,Lng):</label>
         <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa">
@@ -52,15 +56,19 @@
         let map; 
         let routePolyline; 
 
-        // Funkcja inicjalizująca mapę
+        // Funkcja inicjalizująca mapę (wywoływana przez API Google)
         function initMap() {
-            console.log("Mapa została zainicjowana!");
-            map = new google.maps.Map(document.getElementById('map'), {
-                center: { lat: 52.23, lng: 21.01 },
-                zoom: 12,
-            });
+            // Dodajemy to sprawdzenie na wypadek, gdyby initMap wywołała się dwukrotnie
+            if (!map) {
+                map = new google.maps.Map(document.getElementById('map'), {
+                    center: { lat: 52.23, lng: 21.01 },
+                    zoom: 12,
+                });
+                console.log("Mapa została zainicjowana!");
+            }
         }
 
+        // Funkcja usuwająca starą trasę
         function clearRoute() {
             if (routePolyline) {
                 routePolyline.setMap(null);
@@ -70,13 +78,11 @@
         
         function drawRoute(encodedPolyline) {
             if (!map) {
-                // Ta linia była naszą poprzednią "awaryjną" poprawką.
-                // Teraz powinna być niepotrzebna, ale zostawiamy ją dla bezpieczeństwa.
                 initMap();
             }
 
             if (!map) {
-                 console.error("Mapa jest null nawet po próbie ponownej inicjalizacji.");
+                 console.error("Mapa jest null.");
                  return;
             }
             
@@ -103,7 +109,6 @@
         }
 
         async function generateRoute() {
-            // ... (pomijam kod z pobieraniem URL i danych, ponieważ jest poprawny)
             const apiUrlElement = document.getElementById('api-url');
             const apiUrl = apiUrlElement.value;
             const origin = document.getElementById('origin').value;
@@ -114,7 +119,7 @@
             clearRoute(); 
 
             try {
-                // Wywołanie API...
+                // ... (pomijam kod fetch)
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -142,10 +147,6 @@
                 resultsDiv.innerHTML = `<span class="error">BŁĄD SIECI: Nie udało się połączyć z API.</span>\nSprawdź, czy serwer działa i adres URL jest poprawny.\nSzczegóły: ${error.message}`;
             }
         }
-        
-        // 🚨 KROK 3: Nowoczesny, asynchroniczny sposób ładowania Google Maps API
-        (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importScript",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={});d.loaded=function(){};d.ds=d.ds||[];m.head.insertBefore((h=m.createElement("script")),m.head.firstChild);h.async=1;h.src=p;a=h;k=m.getElementsByTagName("script")[0];k.parentNode.insertBefore(a,k);h.onload=function(){d.loaded()};var f=m.createElement("script");f.async=1;f.src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAW2DUptV5TFogXHiIDBXCbDlHIK9tPtaM&libraries=geometry&callback=initMap";m.head.appendChild(f);})
-        (window);
     </script>
 </body>
 </html>
