@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wyznaczanie Trasy i Mapa</title>
     
-    <script async
+    <script defer
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAW2DUptV5TFogXHiIDBXCbDlHIK9tPtaM&callback=initMap&libraries=geometry">
     </script>
     
@@ -36,7 +36,7 @@
     <div class="container">
         <h1>Wyznaczanie Trasy i Mapa</h1>
 
-        <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
+         <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
         
         <label for="origin">Punkt Początkowy (Adres lub Lat,Lng):</label>
         <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa">
@@ -77,6 +77,8 @@
         }
         
         function drawRoute(encodedPolyline) {
+            // Ponieważ użyliśmy defer/callback, ta linia powinna być niepotrzebna, 
+            // ale zostawiamy ją jako zabezpieczenie przed błędami
             if (!map) {
                 initMap();
             }
@@ -119,7 +121,7 @@
             clearRoute(); 
 
             try {
-                // ... (pomijam kod fetch)
+                // ... (kod fetch)
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
