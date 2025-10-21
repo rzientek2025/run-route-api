@@ -24,7 +24,7 @@
         #results { margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
         .error { color: #dc3545; font-weight: bold; }
         #map {
-            height: 400px; /* Określ wysokość kontenera mapy */
+            height: 400px; 
             width: 100%;
             margin-top: 20px;
             border: 1px solid #ccc;
@@ -34,7 +34,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Wyznaczanie Trasy (Directions API)</h1>
+        <h1>Wyznaczanie Trasy i Mapa</h1>
 
         <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
         
@@ -64,6 +64,14 @@
                 zoom: 12,
             });
         }
+
+        // Funkcja usuwająca starą trasę z mapy
+        function clearRoute() {
+            if (routePolyline) {
+                routePolyline.setMap(null);
+                routePolyline = null; // Zwalnianie zasobów
+            }
+        }
         
         async function generateRoute() {
             const apiUrlElement = document.getElementById('api-url');
@@ -79,10 +87,9 @@
             const resultsDiv = document.getElementById('results');
             
             resultsDiv.innerHTML = "Wysyłam zapytanie do API...";
-            // Usuwamy starą trasę, jeśli istnieje
-            if (routePolyline) {
-                routePolyline.setMap(null);
-            }
+            
+            // Usunięcie starej trasy NATYCHMIAST po kliknięciu
+            clearRoute(); 
 
             try {
                 const response = await fetch(apiUrl, {
@@ -94,6 +101,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
+                    // W przypadku błędu API, tylko wyświetlamy błąd, nie próbujemy rysować
                     resultsDiv.innerHTML = `<span class="error">BŁĄD: ${data.error || 'Nieznany błąd'}</span>\nSzczegóły: ${data.details || 'Brak'}`;
                     return;
                 }
@@ -110,6 +118,7 @@
                 drawRoute(data.polyline);
 
             } catch (error) {
+                // W przypadku błędu sieci, tylko wyświetlamy błąd
                 resultsDiv.innerHTML = `<span class="error">BŁĄD SIECI: Nie udało się połączyć z API.</span>\nSprawdź, czy serwer działa i adres URL jest poprawny.\nSzczegóły: ${error.message}`;
             }
         }
@@ -117,26 +126,25 @@
         // Funkcja do rysowania trasy na mapie
         function drawRoute(encodedPolyline) {
             if (!map) {
-                console.error("Mapa nie została zainicjowana. Sprawdź, czy klucz API jest poprawny.");
+                console.error("Mapa nie została zainicjowana. Nie można rysować trasy.");
                 return;
             }
             
-            // 1. Zdekodowanie polilinii z formatu Google
+            // Zdekodowanie polilinii
             const path = google.maps.geometry.encoding.decodePath(encodedPolyline);
 
-            // 2. Tworzenie obiektu polilinii
+            // Tworzenie i zapisywanie nowej polilinii do zmiennej globalnej
             routePolyline = new google.maps.Polyline({
                 path: path,
                 geodesic: true,
-                strokeColor: '#FF0000', // Kolor czerwony
+                strokeColor: '#FF0000', 
                 strokeOpacity: 1.0,
                 strokeWeight: 4
             });
 
-            // 3. Dodanie trasy do mapy
             routePolyline.setMap(map);
 
-            // 4. Dopasowanie widoku mapy do całej trasy
+            // Dopasowanie widoku mapy do całej trasy
             const bounds = new google.maps.LatLngBounds();
             for (let i = 0; i < path.length; i++) {
                 bounds.extend(path[i]);
