@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wyznaczanie Trasy i Mapa</title>
     
-    <script async
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAW2DUptV5TFogXHiIDBXCbDlHIK9tPtaM&callback=initMap&libraries=geometry">
-    </script>
-    
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
         .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
@@ -52,109 +48,104 @@
         <div id="map"></div>
     </div>
 
-<script>
-    let map; // Globalna zmienna dla obiektu mapy
-    let routePolyline; // Globalna zmienna do przechowywania aktualnej trasy
+    <script>
+        let map; 
+        let routePolyline; 
 
-    // Funkcja inicjalizująca mapę (wywoływana przez API Google)
-    function initMap() {
-        // Ustawiamy domyślne centrum mapy 
-        map = new google.maps.Map(document.getElementById('map'), {
-            center: { lat: 52.23, lng: 21.01 },
-            zoom: 12,
-        });
-        console.log("Mapa została zainicjowana!");
-    }
-
-    // Funkcja usuwająca starą trasę
-    function clearRoute() {
-        if (routePolyline) {
-            routePolyline.setMap(null);
-            routePolyline = null;
-        }
-    }
-    
-    // Funkcja do rysowania trasy na mapie
-    function drawRoute(encodedPolyline) {
-        if (!map) {
-            // 🚨 Jeśli mapa zniknęła po odświeżeniu, spróbuj ją na nowo zainicjować
-            initMap();
-        }
-
-        if (!map) {
-             console.error("Mapa jest null nawet po próbie ponownej inicjalizacji. Sprawdź F12.");
-             return;
-        }
-        
-        // Usunięcie starej trasy, jeśli wystąpił błąd przed rysowaniem
-        clearRoute(); 
-
-        // Zdekodowanie polilinii
-        const path = google.maps.geometry.encoding.decodePath(encodedPolyline);
-
-        // Tworzenie i zapisywanie nowej polilinii do zmiennej globalnej
-        routePolyline = new google.maps.Polyline({
-            path: path,
-            geodesic: true,
-            strokeColor: '#FF0000', 
-            strokeOpacity: 1.0,
-            strokeWeight: 4
-        });
-
-        routePolyline.setMap(map);
-
-        // Dopasowanie widoku mapy do całej trasy
-        const bounds = new google.maps.LatLngBounds();
-        for (let i = 0; i < path.length; i++) {
-            bounds.extend(path[i]);
-        }
-        map.fitBounds(bounds);
-    }
-
-    async function generateRoute() {
-        const apiUrlElement = document.getElementById('api-url');
-        const apiUrl = apiUrlElement.value;
-        const origin = document.getElementById('origin').value;
-        const destination = document.getElementById('destination').value;
-        const resultsDiv = document.getElementById('results');
-        
-        resultsDiv.innerHTML = "Wysyłam zapytanie do API...";
-        
-        // Usunięcie starej trasy
-        clearRoute(); 
-
-        try {
-            // ... (pomijam kod fetch, ponieważ jest poprawny)
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ origin, destination })
+        // Funkcja inicjalizująca mapę
+        function initMap() {
+            console.log("Mapa została zainicjowana!");
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 52.23, lng: 21.01 },
+                zoom: 12,
             });
+        }
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                // Obsługa błędu API
-                resultsDiv.innerHTML = `<span class="error">BŁĄD: ${data.error || 'Nieznany błąd'}</span>\nSzczegóły: ${data.details || 'Brak'}`;
-                return;
+        function clearRoute() {
+            if (routePolyline) {
+                routePolyline.setMap(null);
+                routePolyline = null;
+            }
+        }
+        
+        function drawRoute(encodedPolyline) {
+            if (!map) {
+                // Ta linia była naszą poprzednią "awaryjną" poprawką.
+                // Teraz powinna być niepotrzebna, ale zostawiamy ją dla bezpieczeństwa.
+                initMap();
             }
 
-            // Sukces
-            resultsDiv.innerHTML = `
-                <p style="color:#28a745; font-weight: bold;">STATUS: ${data.status}</p>
-                <p><strong>Dystans:</strong> ${data.distance_km} km</p>
-                <p><strong>Message:</strong> ${data.message}</p>
-                <p><strong>Poliline (Fragment):</strong> ${data.polyline.substring(0, 50)}... [${data.polyline.length} znaków]</p>
-            `;
+            if (!map) {
+                 console.error("Mapa jest null nawet po próbie ponownej inicjalizacji.");
+                 return;
+            }
             
-            // RYSOWANIE TRASY NA MAPIE
-            drawRoute(data.polyline);
+            clearRoute(); 
 
-        } catch (error) {
-            // Obsługa błędu sieci
-            resultsDiv.innerHTML = `<span class="error">BŁĄD SIECI: Nie udało się połączyć z API.</span>\nSprawdź, czy serwer działa i adres URL jest poprawny.\nSzczegóły: ${error.message}`;
+            // Rysowanie
+            const path = google.maps.geometry.encoding.decodePath(encodedPolyline);
+            routePolyline = new google.maps.Polyline({
+                path: path,
+                geodesic: true,
+                strokeColor: '#FF0000', 
+                strokeOpacity: 1.0,
+                strokeWeight: 4
+            });
+
+            routePolyline.setMap(map);
+
+            // Dopasowanie widoku mapy
+            const bounds = new google.maps.LatLngBounds();
+            for (let i = 0; i < path.length; i++) {
+                bounds.extend(path[i]);
+            }
+            map.fitBounds(bounds);
         }
-    }
-</script>
+
+        async function generateRoute() {
+            // ... (pomijam kod z pobieraniem URL i danych, ponieważ jest poprawny)
+            const apiUrlElement = document.getElementById('api-url');
+            const apiUrl = apiUrlElement.value;
+            const origin = document.getElementById('origin').value;
+            const destination = document.getElementById('destination').value;
+            const resultsDiv = document.getElementById('results');
+            
+            resultsDiv.innerHTML = "Wysyłam zapytanie do API...";
+            clearRoute(); 
+
+            try {
+                // Wywołanie API...
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ origin, destination })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    resultsDiv.innerHTML = `<span class="error">BŁĄD: ${data.error || 'Nieznany błąd'}</span>\nSzczegóły: ${data.details || 'Brak'}`;
+                    return;
+                }
+
+                // Sukces
+                resultsDiv.innerHTML = `
+                    <p style="color:#28a745; font-weight: bold;">STATUS: ${data.status}</p>
+                    <p><strong>Dystans:</strong> ${data.distance_km} km</p>
+                    <p><strong>Message:</strong> ${data.message}</p>
+                    <p><strong>Poliline (Fragment):</strong> ${data.polyline.substring(0, 50)}... [${data.polyline.length} znaków]</p>
+                `;
+                
+                drawRoute(data.polyline);
+
+            } catch (error) {
+                resultsDiv.innerHTML = `<span class="error">BŁĄD SIECI: Nie udało się połączyć z API.</span>\nSprawdź, czy serwer działa i adres URL jest poprawny.\nSzczegóły: ${error.message}`;
+            }
+        }
+        
+        // 🚨 KROK 3: Nowoczesny, asynchroniczny sposób ładowania Google Maps API
+        (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importScript",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={});d.loaded=function(){};d.ds=d.ds||[];m.head.insertBefore((h=m.createElement("script")),m.head.firstChild);h.async=1;h.src=p;a=h;k=m.getElementsByTagName("script")[0];k.parentNode.insertBefore(a,k);h.onload=function(){d.loaded()};var f=m.createElement("script");f.async=1;f.src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAW2DUptV5TFogXHiIDBXCbDlHIK9tPtaM&libraries=geometry&callback=initMap";m.head.appendChild(f);})
+        (window);
+    </script>
 </body>
 </html>
