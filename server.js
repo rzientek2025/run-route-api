@@ -83,14 +83,12 @@ app.post('/routes/generate', async (req, res) => {
 
     try {
         // --- KROK 1: Geolokalizacja punktu startowego (z adresu na Lat/Lng) ---
-        // Wykorzystanie Lat,Lng podanych bezpośrednio w polu (jeśli są)
         let startLocation;
         const coordsMatch = origin.match(/^(-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)$/);
         
         if (coordsMatch) {
             startLocation = { lat: parseFloat(coordsMatch[1]), lng: parseFloat(coordsMatch[3]) };
         } else {
-            // Geokodowanie adresu
             const geoResponse = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
                 params: {
                     address: origin,
@@ -110,55 +108,46 @@ app.post('/routes/generate', async (req, res) => {
         // --- KROK 2: Algorytm iteracyjny dopasowania dystansu z 2 Waypointami ---
         
         // PARAMETRY OPTYMALIZACYJNE
-        const MAX_ATTEMPTS = 10; 
+        const MAX_ATTEMPTS = 15; // Zwiększamy liczbę prób dla lepszego dopasowania
         const ACCEPTANCE_TOLERANCE = 0.05; // 5% tolerancji (95%-105%)
         const MAX_OVERAGE_FACTOR = 1.10; // Maksymalne dopuszczalne przekroczenie dystansu (10%)
         const MAX_ACCEPTABLE_DISTANCE = TARGET_DISTANCE * MAX_OVERAGE_FACTOR;
 
-        // Promień jest proporcjonalny do 1/3 docelowego dystansu pętli
-        const INITIAL_RADIUS_METERS = TARGET_DISTANCE / 3.0; 
+        // Promień jest proporcjonalny do 1/4 docelowego dystansu pętli
+        const INITIAL_RADIUS_METERS = TARGET_DISTANCE / 4.0; 
         
         let bestRoute = null;
         let bestDeviation = Infinity;
 
-        // Przekształcenie kierunku na stopnie
-        const baseBearing = getBearingFromDirection(direction || ''); 
+        // Bazowy kierunek dla Waypointa A
+        const baseBearingA = getBearingFromDirection(direction || ''); 
         
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             
-            // Lekka zmiana promienia wokół wartości bazowej
-            const radius = INITIAL_RADIUS_METERS * (1 + (Math.random() * 0.2 - 0.1)); // +- 10%
+            // Promienie są losowo odchylane od wartości bazowej
+            const radiusA = INITIAL_RADIUS_METERS * (1 + (Math.random() * 0.4 - 0.2)); // +/- 20%
+            const radiusB = radiusA * (1.1 + Math.random() * 0.2); // Waypoint B jest dalej o 10-30%
 
-            // Różne kierunki dla każdej próby
-            let currentBearing;
-            if (direction) {
-                // Jeśli kierunek jest podany, tylko lekko go perturbujemy
-                currentBearing = (baseBearing + (Math.random() * 20 - 10)) % 360; 
-            } else {
-                 // Jeśli nie jest podany, wybieramy losowy
-                currentBearing = Math.floor(Math.random() * 360);
-            }
-            
-            // W1 (Waypoint 1): Obliczony na podstawie promienia i aktualnego kierunku
+            // W1 (Waypoint A): Lekko odchylony od kierunku bazowego
+            const currentBearingA = (baseBearingA + (Math.random() * 20 - 10) + 360) % 360; 
+
             const W1 = calculateDestination(
                 startLocation.lat, 
                 startLocation.lng, 
-                radius, 
-                currentBearing
+                radiusA, 
+                currentBearingA
             );
             const W1String = `${W1.lat},${W1.lng}`;
 
-            // W2 (Waypoint 2): Obliczony z W1 z pewnym przesunięciem
-            // Używamy przesunięcia o 90 stopni (prostopadle) do W1, aby stworzyć kształt litery C
-            // Dystans do W2 jest nieco większy, aby trasa była dłuższa
-            const W2Bearing = (currentBearing + 90) % 360;
-            const W2Radius = radius * 1.25; 
+            // W2 (Waypoint B): Generowany w kierunku prostopadłym/przeciwnym do W1.
+            // Używamy kierunku przesuniętego o ~120 stopni dla bardziej okrągłego kształtu.
+            const currentBearingB = (currentBearingA + 120 + (Math.random() * 40 - 20) + 360) % 360; 
 
             const W2 = calculateDestination(
                 startLocation.lat, 
                 startLocation.lng, 
-                W2Radius, 
-                W2Bearing
+                radiusB, 
+                currentBearingB
             );
             const W2String = `${W2.lat},${W2.lng}`;
             
@@ -167,8 +156,8 @@ app.post('/routes/generate', async (req, res) => {
 
             const params = {
                 origin: origin,
-                destination: origin, // Wracamy do startu
-                waypoints: waypointsString, // Przez dwa punkty pośrednie
+                destination: origin, 
+                waypoints: waypointsString, 
                 optimizeWaypoints: false, 
                 mode: 'walking',
                 avoidFerries: true,
@@ -176,12 +165,19 @@ app.post('/routes/generate', async (req, res) => {
                 key: process.env.GOOGLE_API_KEY
             };
 
-            const response = await axios.get('https://maps.googleapis.com/maps/api/directions/json', { params });
+            let response;
+            try {
+                 response = await axios.get('https://maps.googleapis.com/maps/api/directions/json', { params });
+            } catch(e) {
+                 console.error(`Błąd sieci/API w próbie ${attempt}: ${e.message}`);
+                 continue; // Kontynuuj pętlę w przypadku błędu
+            }
+            
             const data = response.data;
 
             if (data.status !== 'OK') {
-                console.error(`Directions API zawiodło w próbie ${attempt}. Status: ${data.status}.`);
-                continue; 
+                console.warn(`Directions API zawiodło w próbie ${attempt}. Status: ${data.status}. Waypoints: ${waypointsString}`);
+                continue; // Kontynuuj pętlę, jeśli API zwróci błąd (np. ZERO_RESULTS)
             }
 
             // Sumowanie dystansów
@@ -191,7 +187,7 @@ app.post('/routes/generate', async (req, res) => {
                 totalDistanceValue += leg.distance.value;
             });
 
-            console.log(`Próba ${attempt}: Promień: ${radius.toFixed(0)}m, Dystans uzyskany: ${totalDistanceValue}m`);
+            console.log(`Próba ${attempt}: Promień A: ${radiusA.toFixed(0)}m, Promień B: ${radiusB.toFixed(0)}m. Dystans uzyskany: ${totalDistanceValue}m`);
 
             
             // --- LOGIKA WYBORU NAJLEPSZEJ TRASY Z OGRANICZENIEM DŁUGOŚCI ---
@@ -207,19 +203,15 @@ app.post('/routes/generate', async (req, res) => {
                     console.log(`Nowa najlepsza trasa znaleziona (odchylenie: ${currentDeviation.toFixed(0)}m)`);
                 }
 
-                // 3. Sprawdzenie warunku sukcesu (trasa jest w zakresie 95%-105% docelowej)
+                // 3. Sprawdzenie warunku szybkiego sukcesu (trasa jest w zakresie 95%-105% docelowej)
                 if (totalDistanceValue >= TARGET_DISTANCE * (1 - ACCEPTANCE_TOLERANCE)) {
-                     // Jeśli jest bardzo blisko (np. w zakresie 2.5%), przerywamy od razu
-                    if (currentDeviation <= TARGET_DISTANCE * (ACCEPTANCE_TOLERANCE / 2)) {
+                     // Jeśli jest bardzo blisko (np. w zakresie 2.5% - pół tolerancji), przerywamy
+                    if (currentDeviation <= TARGET_DISTANCE * (ACCEPTANCE_TOLERANCE / 2.5)) {
                         console.log(`Trasa idealnie dopasowana! Dystans: ${totalDistanceValue}m`);
                         break; 
                     }
                 }
             }
-            
-            // Jeśli trasa jest za długa lub za krótka, automatyczne zmiany promienia są teraz 
-            // zbędne. Nowa logika polega na losowym generowaniu nowych Waypointów i wyborze 
-            // najlepszego dopasowania.
         }
 
 
@@ -227,7 +219,7 @@ app.post('/routes/generate', async (req, res) => {
         if (!bestRoute) {
              return res.status(404).json({ 
                 error: 'Nie udało się wyznaczyć sensownej pętli.', 
-                details: 'Google Directions API nie było w stanie znaleźć urozmaiconej pętli zbliżonej do docelowego dystansu po kilku próbach w dopuszczalnym zakresie (Max +10%). Spróbuj zmienić Punkt Startowy lub Kierunek.' 
+                details: 'Google Directions API nie było w stanie znaleźć urozmaiconej pętli zbliżonej do docelowego dystansu po 15 próbach w dopuszczalnym zakresie (Max +10%). Spróbuj zmienić Punkt Startowy lub Kierunek.' 
             });
         }
         
@@ -240,7 +232,7 @@ app.post('/routes/generate', async (req, res) => {
             distance_km: (bestRoute.totalDistanceValue / 1000).toFixed(2),
             message: `Wyznaczono urozmaiconą pętlę o dystansie ${totalDistanceText}. Docelowy dystans: ${(TARGET_DISTANCE / 1000).toFixed(2)} km.`,
             polyline: data.routes[0].overview_polyline.points,
-            details: `Wyznaczono pętlę A -> W1 -> W2 -> A po ${totalDistanceText}.`
+            details: `Wyznaczono pętlę A -> W1 -> W2 -> A po ${totalDistanceText}. Użyte Waypointy: ${bestRoute.waypoints}`
         });
 
     } catch (error) {
