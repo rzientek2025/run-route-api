@@ -75,12 +75,12 @@
 
         // Klucz API Google Maps JS API jest wymagany tutaj:
         // PAMIĘTAJ O ZMIANIE KLUCZA!!!
-        const GMAPS_API_KEY = "AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI"; 
+        const GMAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY"; 
         
         let map;
         let polyline;
         let startMarker; 
-        let MarkerElement; // Nowa klasa do przechowywania AdvancedMarkerElement
+        let MarkerElement;
 
         const originInput = document.getElementById('origin');
         const distanceInput = document.getElementById('distance');
@@ -240,7 +240,7 @@
                 distance: distanceMeters, // wysyłamy w metrach
             };
             
-            // ZMIANA KRYTYCZNA: Używamy metody GET z Query Parameters
+            // Używamy metody GET z Query Parameters
             const params = new URLSearchParams(requestBody).toString();
             const apiUrl = `${API_ROUTE_URL}?${params}`;
 
