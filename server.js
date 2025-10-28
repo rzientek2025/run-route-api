@@ -110,4 +110,88 @@ app.post('/routes/generate', async (req, res) => {
         
         const intermediatePoint = calculateDestination(
             startLocation.lat, 
-            startLocation.lng,
+            startLocation.lng, 
+            radiusMeters, 
+            randomBearing
+        );
+
+        const intermediatePointString = `${intermediatePoint.lat},${intermediatePoint.lng}`;
+        
+        // 3. Wyznaczanie trasy (A -> B -> A)
+        const params = {
+            origin: `${startLocation.lat},${startLocation.lng}`,
+            destination: `${startLocation.lat},${startLocation.lng}`, 
+            waypoints: intermediatePointString, 
+            optimizeWaypoints: false, 
+            mode: 'walking',
+            avoidFerries: true,
+            avoidTolls: true,
+            key: process.env.GOOGLE_API_KEY
+        };
+
+        try {
+            const response = await axios.get('https://maps.googleapis.com/maps/api/directions/json', { params });
+            const data = response.data;
+
+            if (data.status !== 'OK' || !data.routes || data.routes.length === 0) {
+                currentRadiusFactor *= CORRECTION_FACTOR;
+                continue;
+            }
+
+            const legs = data.routes[0].legs;
+            let totalDistanceValue = 0;
+            legs.forEach(leg => { totalDistanceValue += leg.distance.value; });
+
+            const diff = Math.abs(totalDistanceValue - TARGET_DISTANCE);
+            
+            // Warunek sukcesu w ramach tolerancji
+            if (totalDistanceValue >= TARGET_DISTANCE * (1 - TOLERANCE) && totalDistanceValue <= TARGET_DISTANCE * MAX_OVERLENGTH_FACTOR) {
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestRoute = {
+                        distance: totalDistanceValue,
+                        polyline: data.routes[0].overview_polyline.points,
+                        attempts: i + 1
+                    };
+                }
+                if (diff < TARGET_DISTANCE * (TOLERANCE / 2)) {
+                    break;
+                }
+            } 
+            
+            // Korekta promienia
+            if (totalDistanceValue < TARGET_DISTANCE) {
+                currentRadiusFactor *= CORRECTION_FACTOR;
+            } else {
+                 currentRadiusFactor /= CORRECTION_FACTOR;
+            }
+
+        } catch (error) {
+            currentRadiusFactor *= CORRECTION_FACTOR;
+        }
+    } 
+
+    
+    // 4. Zwrócenie wyniku
+    if (!bestRoute) {
+        return res.status(404).json({
+            error: 'Nie udało się wyznaczyć pętli.',
+            details: `Nie znaleziono trasy bliskiej ${ (TARGET_DISTANCE / 1000).toFixed(2)} km.`
+        });
+    }
+
+    const distanceKm = (bestRoute.distance / 1000).toFixed(2);
+    const targetKm = (TARGET_DISTANCE / 1000).toFixed(2);
+
+    res.json({
+        status: 'OK',
+        distance_km: distanceKm,
+        message: `Wyznaczono pętlę o dystansie ${distanceKm} km. Docelowy: ${targetKm} km.`,
+        polyline: bestRoute.polyline,
+    });
+});
+
+// Uruchomienie serwera
+app.listen(PORT, () => {
+    console.log(`Serwer nasłuchuje na porcie ${PORT}`);
+});
