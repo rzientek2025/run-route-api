@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generator Pętli Biegowych</title>
-    <!-- Ładowanie Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Ustawienia widoku i font */
@@ -33,21 +32,17 @@
 
         <div id="controls" class="bg-white p-6 rounded-xl shadow-lg relative">
             
-            <!-- Obszar ładowania -->
             <div id="loading-overlay" class="loading-overlay hidden">
                 <div class="animate-spin rounded-full h-12 w-12 border-4 border-t-4 border-blue-500 border-t-transparent mb-3"></div>
                 <p id="loading-message" class="text-blue-600 font-semibold">Generowanie trasy... (Może potrwać do 10 sekund)</p>
             </div>
 
-            <!-- Formularz -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
-                <!-- Pole Adres Startowy -->
                 <div class="col-span-1 md:col-span-2 relative">
                     <label for="origin" class="block text-sm font-medium text-gray-700 mb-1">Adres Startowy / Współrzędne</label>
                     <input type="text" id="origin" value="Plac Piłsudskiego, Warszawa" placeholder="Np. Kraków, Rynek Główny 1" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
                     <button id="use-location-btn" class="absolute right-2 top-9 bg-blue-500 text-white p-1 rounded-full hover:bg-blue-600 transition duration-150" title="Użyj obecnej lokalizacji">
-                        <!-- Icon: Location pin (lucide-react equivalent) -->
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
                             <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
                             <circle cx="12" cy="10" r="3"/>
@@ -55,13 +50,11 @@
                     </button>
                 </div>
                 
-                <!-- Pole Dystans -->
                 <div>
                     <label for="distance" class="block text-sm font-medium text-gray-700 mb-1">Dystans (km)</label>
                     <input type="number" id="distance" value="10" min="1" step="0.5" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
                 </div>
 
-                <!-- Przycisk Generowania -->
                 <div class="col-span-full mt-4">
                     <button id="generate-btn" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition duration-200 shadow-md">
                         Generuj Pętlę
@@ -69,12 +62,10 @@
                 </div>
             </div>
             
-            <!-- Panel Wiadomości/Błędów -->
             <div id="message-panel" class="mt-6 p-3 rounded-lg text-sm hidden" role="alert"></div>
 
         </div>
 
-        <!-- Mapa -->
         <div id="map"></div>
     </div>
 
@@ -83,12 +74,12 @@
         const API_ROUTE_URL = '/routes/generate'; 
 
         // Klucz API Google Maps JS API jest wymagany tutaj:
-        // Pamiętaj, że musisz wkleić swój klucz!
+        // PAMIĘTAJ O ZMIANIE KLUCZA!!!
         const GMAPS_API_KEY = "AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI"; 
         
         let map;
         let polyline;
-        let startMarker; // Zmieniamy to na nową instancję AdvancedMarkerElement
+        let startMarker; 
         let MarkerElement; // Nowa klasa do przechowywania AdvancedMarkerElement
 
         const originInput = document.getElementById('origin');
@@ -99,7 +90,9 @@
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingMessage = document.getElementById('loading-message');
 
-        // Funkcja inicjalizująca Mapę Google
+
+        // --- FUNKCJE MAPY ---
+
         async function initMap() {
             // Domyślna lokalizacja (np. Warszawa)
             const defaultLocation = { lat: 52.237, lng: 21.017 }; 
@@ -130,8 +123,6 @@
             });
         }
         
-        // --- FUNKCJE MAPY ---
-        
         function updateMap(encodedPolyline, distanceKm, latLng) {
             // Dekodowanie Polylines
             const path = google.maps.geometry.encoding.decodePath(encodedPolyline);
@@ -140,7 +131,7 @@
             polyline.setPath(path);
             
             // Ustawienie markera startowego
-            const startPoint = latLng ? new google.maps.LatLng(latLng.lat, latLng.lng) : path[0];
+            const startPoint = latLng ? latLng : path[0];
             
             // Używamy nowej metody ustawiania pozycji dla AdvancedMarkerElement
             startMarker.position = startPoint;
@@ -243,20 +234,26 @@
             setLoading(true);
             displayMessage('default', 'Wysyłanie żądania do serwera...');
             
+            // Przygotowanie danych do wysłania
+            const requestBody = {
+                origin: origin,
+                distance: distanceMeters, // wysyłamy w metrach
+            };
+            
+            // ZMIANA KRYTYCZNA: Używamy metody GET z Query Parameters
+            const params = new URLSearchParams(requestBody).toString();
+            const apiUrl = `${API_ROUTE_URL}?${params}`;
+
             try {
-                // Użycie stałego adresu względnego API_ROUTE_URL
-                const response = await fetch(API_ROUTE_URL, { 
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ origin: origin, distance: distanceMeters }),
+                // Żądanie GET
+                const response = await fetch(apiUrl, { 
+                    method: 'GET',
                 });
                 
                 // Sprawdzenie, czy odpowiedź ma status OK
                 if (!response.ok) {
                     const errorText = await response.text();
-                    displayMessage('error', `BŁĄD SERWERA (${response.status}): Serwer zwrócił status błędu. Najprawdopodobniej ${response.status === 405 ? 'metoda POST nie jest obsługiwana' : 'inna konfiguracja'}. Odpowiedź: ${errorText.substring(0, 100)}...`);
+                    displayMessage('error', `BŁĄD SERWERA (${response.status}): Serwer zwrócił status błędu. Odpowiedź: ${errorText.substring(0, 100)}...`);
                     return;
                 }
 
@@ -266,7 +263,7 @@
                     const result = await response.json();
 
                     if (result.error) {
-                        // Obsługa błędów zwróconych przez Node.js API (np. REQUEST_DENIED, błąd geolokalizacji)
+                        // Obsługa błędów zwróconych przez Node.js API
                         const errorDetails = result.details || 'Brak szczegółów błędu.';
                         displayMessage('error', `BŁĄD: ${result.error}. Szczegóły: ${errorDetails}`);
                         return;
@@ -284,13 +281,13 @@
 
                 } else {
                      const errorText = await response.text();
-                     displayMessage('error', `BŁĄD PARSOWANIA: Oczekiwano JSON, otrzymano ${contentType || 'brak typu'}. Otrzymano HTML. Sprawdź logs serwera.`);
-                     console.error("Otrzymana odpowiedź serwera (może być HTML):", errorText.substring(0, 500));
+                     displayMessage('error', `BŁĄD PARSOWANIA: Oczekiwano JSON, otrzymano ${contentType || 'brak typu'}. Otrzymano nieoczekiwaną odpowiedź. Sprawdź logs serwera.`);
+                     console.error("Otrzymana odpowiedź serwera:", errorText.substring(0, 500));
                 }
 
             } catch (error) {
                 console.error('Błąd komunikacji z serwerem:', error);
-                displayMessage('error', `Błąd komunikacji z API: ${error.message}. Adres: ${API_ROUTE_URL}. Sprawdź, czy serwer działa.`);
+                displayMessage('error', `Błąd komunikacji z API: ${error.message}. Adres: ${apiUrl}. Sprawdź, czy serwer działa i obsługuje GET.`);
             } finally {
                 setLoading(false);
             }
@@ -300,13 +297,13 @@
         window.onload = function() {
             // Ładowanie Google Maps JS API (ASYNC)
             const script = document.createElement('script');
-            // Dodajemy 'marker' do libraries i 'async'
+            // Dodajemy 'marker' do libraries, 'geometry' i 'async'
             script.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_API_KEY}&callback=initMap&libraries=geometry,marker&loading=async`;
             document.head.appendChild(script);
 
             // Wyświetlenie ostrzeżenia o kluczu
             if (GMAPS_API_KEY === "YOUR_GOOGLE_MAPS_API_KEY") {
-                 displayMessage('error', 'KRYTYCZNY BŁĄD KONFIGURACJI: Wymagany jest klucz Google Maps JavaScript API (z modułem geometry i marker). Wklej go do pliku index.html.');
+                 displayMessage('error', 'KRYTYCZNY BŁĄD KONFIGURACJI: Wymagany jest klucz Google Maps JavaScript API. Wklej go do pliku index.html.');
             } else {
                  displayMessage('default', 'Wprowadź adres i dystans lub użyj geolokalizacji, aby rozpocząć.');
             }
