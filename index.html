@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wyznaczanie Trasy i Mapa</title>
-
-    <script defer
+    <title>Generator Pętli Pieszych</title>
+    
+<script defer
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI&callback=initMap&libraries=geometry&loading=async">
     </script>
     
@@ -14,7 +14,7 @@
         .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         h1 { color: #333; text-align: center; }
         label { display: block; margin-top: 10px; font-weight: bold; }
-        input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         button { 
             display: block; width: 100%; padding: 10px; margin-top: 20px; 
             background-color: #007bff; color: white; border: none; border-radius: 4px; 
@@ -34,17 +34,16 @@
 </head>
 <body>
     <div class="container">
-        <h1>Wyznaczanie Trasy i Mapa</h1>
+        <h1>Generator Pętli Pieszych</h1>
 
-         <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
+        <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
         
-        <label for="origin">Punkt Początkowy (Adres lub Lat,Lng):</label>
+        <label for="origin">Punkt Startowy (Adres lub Lat,Lng):</label>
         <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa">
 
-        <label for="destination">Punkt Końcowy (Adres lub Lat,Lng):</label>
-        <input type="text" id="destination" value="Ogród Saski, Warszawa" placeholder="np. Ogród Saski, Warszawa">
-
-        <button onclick="generateRoute()">Wyznacz Trasę i Pokaż na Mapie</button>
+        <label for="distance">Docelowy Dystans Pętli (km):</label>
+        <input type="number" id="distance" value="10" placeholder="np. 10" min="1">
+        <button onclick="generateRoute()">Wyznacz Trasę Pętli</button>
 
         <h2>Wyniki Tekstowe:</h2>
         <div id="results">Czekam na dane...</div>
@@ -58,7 +57,6 @@
 
         // Funkcja inicjalizująca mapę (wywoływana przez API Google)
         function initMap() {
-            // Dodajemy to sprawdzenie na wypadek, gdyby initMap wywołała się dwukrotnie
             if (!map) {
                 map = new google.maps.Map(document.getElementById('map'), {
                     center: { lat: 52.23, lng: 21.01 },
@@ -77,8 +75,6 @@
         }
         
         function drawRoute(encodedPolyline) {
-            // Ponieważ użyliśmy defer/callback, ta linia powinna być niepotrzebna, 
-            // ale zostawiamy ją jako zabezpieczenie przed błędami
             if (!map) {
                 initMap();
             }
@@ -114,18 +110,27 @@
             const apiUrlElement = document.getElementById('api-url');
             const apiUrl = apiUrlElement.value;
             const origin = document.getElementById('origin').value;
-            const destination = document.getElementById('destination').value;
+            const distance = document.getElementById('distance').value; // NOWE: POBIERANIE DYSTANSU
+            
+            // Walidacja dystansu
+            if (isNaN(parseFloat(distance)) || parseFloat(distance) <= 0) {
+                document.getElementById('results').innerHTML = '<span class="error">BŁĄD: Dystans musi być liczbą większą niż 0.</span>';
+                return;
+            }
+
             const resultsDiv = document.getElementById('results');
             
             resultsDiv.innerHTML = "Wysyłam zapytanie do API...";
             clearRoute(); 
 
             try {
-                // ... (kod fetch)
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ origin, destination })
+                    body: JSON.stringify({ 
+                        origin: origin, 
+                        distance: parseFloat(distance) * 1000 // WYSYŁAMY DO API W METRACH
+                    })
                 });
 
                 const data = await response.json();
