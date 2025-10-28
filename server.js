@@ -21,7 +21,6 @@ app.get('/', (req, res) => {
 });
 
 // Funkcja pomocnicza: Oblicza nowy punkt (lat/lng) z zadanego punktu, dystansu (w metrach) i kierunku (stopnie)
-// To zastępuje potrzebę zewnętrznej biblioteki geolib.
 function calculateDestination(lat, lng, distanceMeters, bearingDegrees) {
     const R = 6371000; // Promień Ziemi w metrach
     const angularDistance = distanceMeters / R;
@@ -52,19 +51,19 @@ app.post('/routes/generate', async (req, res) => {
 
     const { origin, distance } = req.body; // distance jest w metrach
 
-    // Walidacja podstawowych parametrów
-    if (!origin || !distance) {
-        return res.status(400).json({ 
-            error: 'Brak wymaganych pól', 
-            details: 'Wymagane: origin (punkt startowy) i distance (dystans pętli w metrach).' 
-        });
-    }
-
     // Walidacja klucza API
     if (!process.env.GOOGLE_API_KEY) {
         return res.status(500).json({ 
             error: 'Błąd konfiguracji serwera', 
             details: 'Brak zmiennej środowiskowej GOOGLE_API_KEY. Sprawdź ustawienia DigitalOcean.' 
+        });
+    }
+
+    // Walidacja podstawowych parametrów
+    if (!origin || !distance || isNaN(distance) || distance <= 0) {
+        return res.status(400).json({ 
+            error: 'Brak lub niepoprawna wartość pól', 
+            details: 'Wymagane: origin (punkt startowy) i distance (dystans pętli w metrach, > 0).' 
         });
     }
 
@@ -79,11 +78,9 @@ app.post('/routes/generate', async (req, res) => {
             }
         });
         
-        // 🚨 DIAGNOSTYKA: Zaloguj pełną odpowiedź, jeśli geokodowanie nie powiodło się
         if (geoResponse.data.status !== 'OK' || geoResponse.data.results.length === 0) {
             console.error('Błąd geokodowania dla adresu:', origin);
             console.error('Odpowiedź Google Geocoding Status:', geoResponse.data.status);
-            console.error('Wiadomość błędu Google:', geoResponse.data.error_message);
             
             return res.status(400).json({ 
                 error: 'Nie udało się geolokalizować punktu startowego.', 
@@ -93,64 +90,98 @@ app.post('/routes/generate', async (req, res) => {
 
         const startLocation = geoResponse.data.results[0].geometry.location;
         
-        // --- KROK 2: Obliczanie punktu pośredniego (Waypoint) ---
-        // Używamy ok. 1/4 docelowego dystansu pętli jako promienia, aby trasa miała pole manewru.
-        const radiusMeters = distance / 4; 
+        // --- KROK 2: Algorytm iteracyjny dopasowania dystansu ---
         
-        // Losowy kierunek (bearing) dla urozmaicenia trasy
-        const randomBearing = Math.floor(Math.random() * 360); 
+        // PARAMETRY OPTYMALIZACYJNE
+        const TARGET_DISTANCE = distance;
+        const MAX_ATTEMPTS = 5;
+        const INITIAL_RADIUS_FACTOR = 0.25; // Początkowy promień to 25% dystansu
+        const CORRECTION_FACTOR = 1.25; // Współczynnik zwiększenia promienia przy każdej nieudanej próbie (25% więcej)
+        const TOLERANCE = 0.05; // Tolerancja 5% (trasa jest OK, jeśli jest w zakresie 95% - 100% docelowej długości)
 
-        const intermediatePoint = calculateDestination(
-            startLocation.lat, 
-            startLocation.lng, 
-            radiusMeters, 
-            randomBearing
-        );
+        let currentRadiusFactor = INITIAL_RADIUS_FACTOR;
+        let bestRoute = null;
 
-        const intermediatePointString = `${intermediatePoint.lat},${intermediatePoint.lng}`;
-        
-        // --- KROK 3: Wyznaczanie trasy (A -> B -> A) ---
-        const params = {
-            origin: origin,
-            destination: origin, // Wracamy do startu
-            waypoints: intermediatePointString, // Przez punkt pośredni (B)
-            optimizeWaypoints: false, // Kolejność jest A -> B -> A
-            mode: 'walking',
-            // Opcje, aby API preferowało ścieżki dla pieszych
-            avoidFerries: true,
-            avoidTolls: true,
-            key: process.env.GOOGLE_API_KEY
-        };
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            console.log(`Próba ${attempt}: Współczynnik promienia: ${currentRadiusFactor}`);
+            
+            // Obliczanie nowego promienia i punktu pośredniego
+            const radiusMeters = TARGET_DISTANCE * currentRadiusFactor;
+            const randomBearing = Math.floor(Math.random() * 360); // Losowy kierunek dla urozmaicenia trasy
 
-        const response = await axios.get('https://maps.googleapis.com/maps/api/directions/json', { params });
-        const data = response.data;
+            const intermediatePoint = calculateDestination(
+                startLocation.lat, 
+                startLocation.lng, 
+                radiusMeters, 
+                randomBearing
+            );
+            const intermediatePointString = `${intermediatePoint.lat},${intermediatePoint.lng}`;
+            
+            // --- Wyznaczanie trasy (A -> B -> A) ---
+            const params = {
+                origin: origin,
+                destination: origin, // Wracamy do startu
+                waypoints: intermediatePointString, // Przez punkt pośredni (B)
+                optimizeWaypoints: false, 
+                mode: 'walking',
+                avoidFerries: true,
+                avoidTolls: true,
+                key: process.env.GOOGLE_API_KEY
+            };
 
-        // Obsługa błędów zwróconych przez Google API
-        if (data.status !== 'OK') {
-            return res.status(400).json({
-                error: `Błąd API Google Maps: ${data.status}`,
-                details: data.error_message || 'Brak szczegółów błędu.',
-                data_status: data.status
+            const response = await axios.get('https://maps.googleapis.com/maps/api/directions/json', { params });
+            const data = response.data;
+
+            if (data.status !== 'OK') {
+                 // Jeśli Directions API zawiedzie, przerwij iterację
+                console.error(`Directions API zawiodło w próbie ${attempt}. Status: ${data.status}`);
+                break;
+            }
+
+            // Sumowanie dystansów
+            const legs = data.routes[0].legs;
+            let totalDistanceValue = 0;
+            legs.forEach(leg => {
+                totalDistanceValue += leg.distance.value;
             });
+
+            console.log(`Dystans uzyskany w próbie ${attempt}: ${totalDistanceValue}m`);
+
+            // Sprawdzenie warunku sukcesu: Trasa jest >= 95% i <= 105% docelowej
+            if (totalDistanceValue >= TARGET_DISTANCE * (1 - TOLERANCE) && totalDistanceValue <= TARGET_DISTANCE * (1 + TOLERANCE)) {
+                
+                bestRoute = { data, totalDistanceValue };
+                console.log(`Trasa dopasowana w próbie ${attempt}! Dystans: ${totalDistanceValue}m`);
+                break; // Znaleziono satysfakcjonującą trasę
+            }
+
+            if (!bestRoute || totalDistanceValue > bestRoute.totalDistanceValue) {
+                bestRoute = { data, totalDistanceValue }; // Zachowaj najlepszą (najdłuższą) dotychczasową trasę
+            }
+
+            // Korekta na następną iterację: Zwiększ promień, jeśli trasa jest za krótka
+            currentRadiusFactor *= CORRECTION_FACTOR;
         }
 
-        // Sumowanie dystansów z obu segmentów (A->B i B->A)
-        const legs = data.routes[0].legs;
-        let totalDistanceValue = 0;
 
-        legs.forEach(leg => {
-            totalDistanceValue += leg.distance.value;
-        });
+        // --- KROK 3: Zwrócenie najlepszej trasy ---
+        if (!bestRoute) {
+             return res.status(500).json({ 
+                error: 'Nie udało się wyznaczyć sensownej trasy', 
+                details: 'Google Directions API nie było w stanie znaleźć pętli zbliżonej do docelowego dystansu po kilku próbach.' 
+            });
+        }
         
-        const totalDistanceText = `${(totalDistanceValue / 1000).toFixed(2)} km`;
-        
+        const totalDistanceText = `${(bestRoute.totalDistanceValue / 1000).toFixed(2)} km`;
+        const data = bestRoute.data;
+
         // Zwrócenie danych do frontendu
         res.json({
             status: 'OK',
-            distance_km: (totalDistanceValue / 1000).toFixed(2),
-            message: `Wyznaczono pętlę o dystansie ${totalDistanceText}. Docelowy dystans: ${(distance / 1000).toFixed(2)} km.`,
+            distance_km: (bestRoute.totalDistanceValue / 1000).toFixed(2),
+            message: `Wyznaczono pętlę o dystansie ${totalDistanceText}. Docelowy dystans: ${(TARGET_DISTANCE / 1000).toFixed(2)} km.`,
             polyline: data.routes[0].overview_polyline.points,
-            details: 'Wyznaczono pętlę A -> B -> A.'
+            details: `Wyznaczono pętlę A -> B -> A po ${bestRoute.totalDistanceValue / 1000} km.`
         });
 
     } catch (error) {
