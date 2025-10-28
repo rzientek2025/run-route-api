@@ -50,7 +50,7 @@
         /* Kontener dla pola adresu i przycisku lokalizacji */
         .input-group { position: relative; display: flex; align-items: center; margin-top: 5px; }
         
-        input[type="text"], input[type="number"] { 
+        input[type="text"], input[type="number"], select { 
             flex-grow: 1;
             padding: 12px; 
             border: 1px solid #bdc3c7; 
@@ -59,7 +59,7 @@
             transition: border-color 0.3s;
         }
         
-        input[type="text"]:focus, input[type="number"]:focus {
+        input[type="text"]:focus, input[type="number"]:focus, select:focus {
             border-color: #3498db;
             outline: none;
         }
@@ -148,8 +148,17 @@
 
                 <label for="distance">2. Docelowy Dystans Pętli (km):</label>
                 <input type="number" id="distance" value="10" placeholder="np. 10" min="1">
+
+                <label for="direction">3. Opcjonalny Kierunek Początkowy:</label>
+                <select id="direction">
+                    <option value="">(Dowolny kierunek)</option>
+                    <option value="N">Północ (N)</option>
+                    <option value="E">Wschód (E)</option>
+                    <option value="S">Południe (S)</option>
+                    <option value="W">Zachód (W)</option>
+                </select>
                 
-                <button class="main-action" onclick="generateRoute()">3. Wyznacz Trasę Pętli</button>
+                <button class="main-action" onclick="generateRoute()">4. Wyznacz Trasę Pętli</button>
             </div>
 
             <div class="map-section">
@@ -296,7 +305,8 @@
             const apiUrlElement = document.getElementById('api-url');
             const apiUrl = apiUrlElement.value;
             const origin = document.getElementById('origin').value.trim();
-            const distance = document.getElementById('distance').value; 
+            const distance = document.getElementById('distance').value;
+            const direction = document.getElementById('direction').value; // Nowa wartość
             
             // Walidacja dystansu
             if (isNaN(parseFloat(distance)) || parseFloat(distance) <= 0) {
@@ -321,7 +331,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         origin: origin, 
-                        distance: distanceMeters
+                        distance: distanceMeters,
+                        direction: direction // Dodanie nowego parametru do requestu
                     })
                 });
 
