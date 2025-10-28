@@ -108,13 +108,13 @@ app.post('/routes/generate', async (req, res) => {
         // --- KROK 2: Algorytm iteracyjny dopasowania dystansu z 2 Waypointami ---
         
         // PARAMETRY OPTYMALIZACYJNE
-        const MAX_ATTEMPTS = 15; // Zwiększamy liczbę prób dla lepszego dopasowania
+        const MAX_ATTEMPTS = 20; // ZWIĘKSZONO DO 20 PRÓB DLA LEPSZEJ SZANSY
         const ACCEPTANCE_TOLERANCE = 0.05; // 5% tolerancji (95%-105%)
         const MAX_OVERAGE_FACTOR = 1.10; // Maksymalne dopuszczalne przekroczenie dystansu (10%)
         const MAX_ACCEPTABLE_DISTANCE = TARGET_DISTANCE * MAX_OVERAGE_FACTOR;
 
-        // Promień jest proporcjonalny do 1/4 docelowego dystansu pętli
-        const INITIAL_RADIUS_METERS = TARGET_DISTANCE / 4.0; 
+        // Promień jest proporcjonalny do 1/3 docelowego dystansu pętli (ZWIĘKSZONO Z 1/4)
+        const INITIAL_RADIUS_METERS = TARGET_DISTANCE / 3.0; 
         
         let bestRoute = null;
         let bestDeviation = Infinity;
@@ -125,11 +125,11 @@ app.post('/routes/generate', async (req, res) => {
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             
             // Promienie są losowo odchylane od wartości bazowej
-            const radiusA = INITIAL_RADIUS_METERS * (1 + (Math.random() * 0.4 - 0.2)); // +/- 20%
-            const radiusB = radiusA * (1.1 + Math.random() * 0.2); // Waypoint B jest dalej o 10-30%
+            const radiusA = INITIAL_RADIUS_METERS * (1 + (Math.random() * 0.5 - 0.25)); // +/- 25% (WIĘKSZY ZAKRES)
+            const radiusB = radiusA * (1.2 + Math.random() * 0.3); // Waypoint B jest dalej o 20-50% (WIĘKSZE ROZSZERZENIE)
 
             // W1 (Waypoint A): Lekko odchylony od kierunku bazowego
-            const currentBearingA = (baseBearingA + (Math.random() * 20 - 10) + 360) % 360; 
+            const currentBearingA = (baseBearingA + (Math.random() * 30 - 15) + 360) % 360; // +/- 15 stopni
 
             const W1 = calculateDestination(
                 startLocation.lat, 
@@ -139,8 +139,7 @@ app.post('/routes/generate', async (req, res) => {
             );
             const W1String = `${W1.lat},${W1.lng}`;
 
-            // W2 (Waypoint B): Generowany w kierunku prostopadłym/przeciwnym do W1.
-            // Używamy kierunku przesuniętego o ~120 stopni dla bardziej okrągłego kształtu.
+            // W2 (Waypoint B): Generowany w kierunku odchylonym o ~120 stopni dla bardziej okrągłego kształtu.
             const currentBearingB = (currentBearingA + 120 + (Math.random() * 40 - 20) + 360) % 360; 
 
             const W2 = calculateDestination(
@@ -219,7 +218,7 @@ app.post('/routes/generate', async (req, res) => {
         if (!bestRoute) {
              return res.status(404).json({ 
                 error: 'Nie udało się wyznaczyć sensownej pętli.', 
-                details: 'Google Directions API nie było w stanie znaleźć urozmaiconej pętli zbliżonej do docelowego dystansu po 15 próbach w dopuszczalnym zakresie (Max +10%). Spróbuj zmienić Punkt Startowy lub Kierunek.' 
+                details: `Google Directions API nie było w stanie znaleźć urozmaiconej pętli zbliżonej do docelowego dystansu po ${MAX_ATTEMPTS} próbach w dopuszczalnym zakresie (Max +10%). Spróbuj zmienić Punkt Startowy lub Kierunek.` 
             });
         }
         
