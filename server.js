@@ -17,7 +17,14 @@ app.use(express.json());
 
 // Prosta trasa GET dla testowania działania API
 app.get('/', (req, res) => {
-    res.send('API działa. Użyj POST do /routes/generate, aby wyznaczyć trasę.');
+    // Zwrócenie adresu URL API dla klienta, używając nagłówka 'X-Forwarded-Host'
+    // lub domyślnej wartości, jeśli serwer jest za reverse proxy (jak DO App Platform)
+    const apiBaseUrl = `http${req.secure ? 's' : ''}://${req.headers['x-forwarded-host'] || req.hostname}${PORT === 80 || PORT === 443 ? '' : `:${PORT}`}`;
+
+    res.json({
+        message: 'API działa. Użyj POST do /routes/generate, aby wyznaczyć trasę.',
+        api_url: apiBaseUrl // Przekazanie adresu bazowego dla frontendu
+    });
 });
 
 // Funkcja pomocnicza: Oblicza nowy punkt (lat/lng) z zadanego punktu, dystansu (w metrach) i kierunku (stopnie)
@@ -71,11 +78,13 @@ app.post('/routes/generate', async (req, res) => {
 
     try {
         // --- KROK 1: Geolokalizacja punktu startowego (z adresu na Lat/Lng) ---
+        // Adres może być albo tekstem (np. "Kraków, Rynek Główny 1") albo współrzędnymi "lat,lng" (np. "50.0647,19.9450")
+        const geoQuery = origin.includes(',') && !isNaN(parseFloat(origin.split(',')[0]))
+            ? { latlng: origin, key: process.env.GOOGLE_API_KEY } // Jeśli to Lat/Lng
+            : { address: origin, key: process.env.GOOGLE_API_KEY }; // Jeśli to adres tekstowy
+
         const geoResponse = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
-            params: {
-                address: origin,
-                key: process.env.GOOGLE_API_KEY
-            }
+            params: geoQuery
         });
         
         if (geoResponse.data.status !== 'OK' || geoResponse.data.results.length === 0) {
