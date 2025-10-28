@@ -94,21 +94,25 @@ app.post('/routes/generate', async (req, res) => {
         
         // PARAMETRY OPTYMALIZACYJNE
         const TARGET_DISTANCE = distance;
-        const MAX_ATTEMPTS = 5;
-        const INITIAL_RADIUS_FACTOR = 0.25; // Początkowy promień to 25% dystansu
-        const CORRECTION_FACTOR = 1.25; // Współczynnik zwiększenia promienia przy każdej nieudanej próbie (25% więcej)
-        const TOLERANCE = 0.05; // Tolerancja 5% (trasa jest OK, jeśli jest w zakresie 95% - 100% docelowej długości)
-        const MAX_OVERLENGTH_FACTOR = 1.15;
+        const MAX_ATTEMPTS = 8; // Zwiększenie prób dla lepszego dopasowania
+        const INITIAL_RADIUS_FACTOR = 0.25; 
+        const CORRECTION_FACTOR = 1.25; 
+        const ACCEPTANCE_TOLERANCE = 0.05; // 5% tolerancji od docelowego
+        const MAX_OVERAGE_FACTOR = 1.10; // Maksymalne dopuszczalne przekroczenie dystansu (10%)
+
+        const MAX_ACCEPTABLE_DISTANCE = TARGET_DISTANCE * MAX_OVERAGE_FACTOR;
 
         let currentRadiusFactor = INITIAL_RADIUS_FACTOR;
         let bestRoute = null;
 
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            console.log(`Próba ${attempt}: Współczynnik promienia: ${currentRadiusFactor}`);
+            console.log(`Próba ${attempt}: Współczynnik promienia: ${currentRadiusFactor.toFixed(2)}`);
             
             // Obliczanie nowego promienia i punktu pośredniego
             const radiusMeters = TARGET_DISTANCE * currentRadiusFactor;
-            const randomBearing = Math.floor(Math.random() * 360); // Losowy kierunek dla urozmaicenia trasy
+            
+            // Zmieniamy kierunek co próbę, aby unikać utknięcia w tym samym kierunku
+            const randomBearing = (attempt * 60) + Math.floor(Math.random() * 30); 
 
             const intermediatePoint = calculateDestination(
                 startLocation.lat, 
@@ -134,9 +138,9 @@ app.post('/routes/generate', async (req, res) => {
             const data = response.data;
 
             if (data.status !== 'OK') {
-                 // Jeśli Directions API zawiedzie, przerwij iterację
-                console.error(`Directions API zawiodło w próbie ${attempt}. Status: ${data.status}`);
-                break;
+                console.error(`Directions API zawiodło w próbie ${attempt}. Status: ${data.status}. Próbuję ponownie z innym promieniem/kierunkiem.`);
+                currentRadiusFactor *= CORRECTION_FACTOR; 
+                continue; 
             }
 
             // Sumowanie dystansów
@@ -148,28 +152,49 @@ app.post('/routes/generate', async (req, res) => {
 
             console.log(`Dystans uzyskany w próbie ${attempt}: ${totalDistanceValue}m`);
 
-            // Sprawdzenie warunku sukcesu: Trasa jest >= 95% i <= 105% docelowej
-            if (totalDistanceValue >= TARGET_DISTANCE * (1 - TOLERANCE) && totalDistanceValue <= TARGET_DISTANCE * (1 + TOLERANCE)) {
-                
-                bestRoute = { data, totalDistanceValue };
-                console.log(`Trasa dopasowana w próbie ${attempt}! Dystans: ${totalDistanceValue}m`);
-                break; // Znaleziono satysfakcjonującą trasę
+            
+            // --- LOGIKA WYBORU NAJLEPSZEJ TRASY Z OGRANICZENIEM DŁUGOŚCI ---
+            
+            const currentDeviation = Math.abs(totalDistanceValue - TARGET_DISTANCE);
+            let bestDeviation = bestRoute ? Math.abs(bestRoute.totalDistanceValue - TARGET_DISTANCE) : Infinity;
+
+            // 1. Sprawdzenie, czy trasa jest akceptowalna (nie przekracza MAX_OVERAGE_FACTOR)
+            if (totalDistanceValue <= MAX_ACCEPTABLE_DISTANCE) {
+                // 2. Jeśli obecna trasa jest bliżej celu niż dotychczasowa "najlepsza", zapisz ją
+                if (currentDeviation < bestDeviation) {
+                    bestRoute = { data, totalDistanceValue };
+                    console.log(`Nowa najlepsza trasa znaleziona (odchylenie: ${currentDeviation.toFixed(0)}m)`);
+                }
+
+                // 3. Sprawdzenie warunku sukcesu (trasa jest w zakresie 95%-105% docelowej)
+                if (totalDistanceValue >= TARGET_DISTANCE * (1 - ACCEPTANCE_TOLERANCE)) {
+                     // Jeśli jest bardzo blisko (np. w zakresie 2.5%), przerywamy od razu
+                    if (currentDeviation <= TARGET_DISTANCE * (ACCEPTANCE_TOLERANCE / 2)) {
+                        console.log(`Trasa idealnie dopasowana! Dystans: ${totalDistanceValue}m`);
+                        break; 
+                    }
+                }
             }
 
-            if (!bestRoute || totalDistanceValue > bestRoute.totalDistanceValue) {
-                bestRoute = { data, totalDistanceValue }; // Zachowaj najlepszą (najdłuższą) dotychczasową trasę
+            // 4. Korekta na następną iterację:
+            if (totalDistanceValue < TARGET_DISTANCE) {
+                // Za krótka -> zwiększ promień, aby trasa była dłuższa
+                currentRadiusFactor *= CORRECTION_FACTOR;
+            } else if (totalDistanceValue > MAX_ACCEPTABLE_DISTANCE) {
+                // Za długa (przekracza limit 110%) -> drastycznie zmniejsz promień
+                currentRadiusFactor /= (CORRECTION_FACTOR * 2); 
+            } else {
+                 // Trasa jest w akceptowalnym zakresie, ale nie jest najlepsza -> spróbuj innego kierunku
+                 currentRadiusFactor = INITIAL_RADIUS_FACTOR; // Reset promienia dla nowego kierunku
             }
-
-            // Korekta na następną iterację: Zwiększ promień, jeśli trasa jest za krótka
-            currentRadiusFactor *= CORRECTION_FACTOR;
         }
 
 
         // --- KROK 3: Zwrócenie najlepszej trasy ---
         if (!bestRoute) {
-             return res.status(500).json({ 
+             return res.status(404).json({ 
                 error: 'Nie udało się wyznaczyć sensownej trasy', 
-                details: 'Google Directions API nie było w stanie znaleźć pętli zbliżonej do docelowego dystansu po kilku próbach.' 
+                details: 'Google Directions API nie było w stanie znaleźć pętli zbliżonej do docelowego dystansu po kilku próbach w dopuszczalnym zakresie (Max +10%).' 
             });
         }
         
