@@ -2,6 +2,7 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const url = require('url'); // Potrzebne do parsowania URL (choć express to robi)
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -9,13 +10,12 @@ const PORT = process.env.PORT || 8080;
 // Ustawienia CORS
 app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'OPTIONS'], // Pozwalamy tylko na GET i OPTIONS
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Express nie potrzebuje już express.json(), ponieważ używamy GET
-
 // Funkcja pomocnicza: Oblicza nowy punkt (lat/lng) z zadanego punktu, dystansu (w metrach) i kierunku (stopnie)
+// Wzór "destination point given distance and bearing from start point"
 function calculateDestination(lat, lng, distanceMeters, bearingDegrees) {
     const R = 6371000; // Promień Ziemi w metrach
     const angularDistance = distanceMeters / R;
@@ -44,9 +44,9 @@ app.get('/', (req, res) => {
     res.send({ message: 'API działa. Użyj GET do /routes/generate z parametrami.', api_url: `http://localhost:${PORT}` });
 });
 
-// Główny routing dla generowania trasy - teraz używa GET
+// WŁAŚCIWA TRASA API - UŻYWA GET
 app.get('/routes/generate', async (req, res) => {
-    // Odczyt danych z query parameters (req.query) zamiast req.body
+    // Odczyt danych z query parameters (req.query)
     const { origin, distance } = req.query; 
     const distanceMeters = parseFloat(distance);
 
@@ -65,12 +65,10 @@ app.get('/routes/generate', async (req, res) => {
         });
     }
 
-    console.log(`Żądanie (GET): Start: ${origin}, Dystans docelowy: ${distanceMeters} metrów`);
-
     // --- ALGORYTM GENEROWANIA PĘTLI ---
     let startLocation;
 
-    // 1. Geolokalizacja punktu startowego (lub użycie współrzędnych, jeśli podano)
+    // 1. Geolokalizacja punktu startowego (lub użycie współrzędnych)
     if (origin.includes(',')) {
         // Użyj współrzędnych, jeśli frontend przesłał "lat,lng"
         const [lat, lng] = origin.split(',').map(Number);
@@ -148,7 +146,6 @@ app.get('/routes/generate', async (req, res) => {
             const data = response.data;
 
             if (data.status !== 'OK' || !data.routes || data.routes.length === 0) {
-                // Jeśli Google nie znalazło trasy, kontynuujemy kolejną próbę
                 console.log(`Próba ${i + 1}: Błąd Google API: ${data.status}. Próbuję ponownie z innym promieniem.`);
                 currentRadiusFactor *= CORRECTION_FACTOR;
                 continue;
@@ -184,14 +181,12 @@ app.get('/routes/generate', async (req, res) => {
                 // Jeśli trasa jest za krótka, zwiększ promień dla kolejnej próby
                 currentRadiusFactor *= CORRECTION_FACTOR;
             }
-            // Trasy zbyt długie są ignorowane, ale promień również może być korygowany
             else if (totalDistanceValue > TARGET_DISTANCE * MAX_OVERLENGTH_FACTOR) {
-                 currentRadiusFactor /= CORRECTION_FACTOR; // Zmniejszamy promień, bo trasa jest za długa
+                 currentRadiusFactor /= CORRECTION_FACTOR; 
             }
 
         } catch (error) {
             console.error(`Błąd podczas komunikacji z Google API w próbie ${i + 1}:`, error.message);
-            // Kontynuujemy do kolejnej próby
             currentRadiusFactor *= CORRECTION_FACTOR;
         }
     } // Koniec pętli for
