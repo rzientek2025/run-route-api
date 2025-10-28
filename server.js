@@ -13,6 +13,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Umożliwia Expressowi paroswanie ciała żądania JSON
 app.use(express.json());
 
 // Prosta trasa GET dla testowania działania API
@@ -22,10 +23,12 @@ app.get('/', (req, res) => {
 
 // Zmieniony routing na /routes/generate
 app.post('/routes/generate', async (req, res) => {
-    // 🚨 POPRAWKA: Prawidłowe odczytanie nowych parametrów
+    // 🚨 NOWA LINIA: Logowanie całego ciała żądania dla celów diagnostycznych
+    console.log('Otrzymane BODY:', req.body); 
+
     const { origin, distance } = req.body; 
 
-    // 🚨 POPRAWKA: Walidacja podstawowych parametrów z nowym komunikatem błędu
+    // Walidacja podstawowych parametrów
     if (!origin || !distance) {
         return res.status(400).json({ 
             error: 'Brak wymaganych pól', 
