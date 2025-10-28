@@ -20,15 +20,15 @@ app.get('/', (req, res) => {
     res.send('API działa. Użyj POST do /routes/generate, aby wyznaczyć trasę.');
 });
 
-// 🚨 KLUCZOWA ZMIANA: Zmieniony routing na /routes/generate
+// Zmieniony routing na /routes/generate
 app.post('/routes/generate', async (req, res) => {
-    // 🚨 NOWE: Odczytujemy punkt startowy i dystans w metrach
+    // 🚨 POPRAWKA: Prawidłowe odczytanie nowych parametrów
     const { origin, distance } = req.body; 
 
-    // Walidacja podstawowych parametrów
+    // 🚨 POPRAWKA: Walidacja podstawowych parametrów z nowym komunikatem błędu
     if (!origin || !distance) {
         return res.status(400).json({ 
-            error: 'Brak wymaganych parametrów', 
+            error: 'Brak wymaganych pól', 
             details: 'Wymagane: origin (punkt startowy) i distance (dystans pętli w metrach).' 
         });
     }
@@ -44,7 +44,7 @@ app.post('/routes/generate', async (req, res) => {
     console.log(`Żądanie: Start: ${origin}, Dystans docelowy: ${distance} metrów`);
 
     // Ustawienie parametrów do Google Directions API
-    // 🚨 TYMCZASOWY CEL: Z A do A (cel = start), aby zweryfikować routing.
+    // TYMCZASOWY CEL: Z A do A (cel = start), aby zweryfikować routing.
     const params = {
         origin: origin,
         destination: origin, // Właściwy algorytm pętli będzie w tym miejscu
