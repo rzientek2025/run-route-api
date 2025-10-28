@@ -97,15 +97,17 @@ app.post('/routes/generate', async (req, res) => {
         const MAX_ATTEMPTS = 5;
         const INITIAL_RADIUS_FACTOR = 0.25; // Początkowy promień to 25% dystansu
         const CORRECTION_FACTOR = 1.25; // Współczynnik zwiększenia promienia przy każdej nieudanej próbie (25% więcej)
-        const TOLERANCE = 0.05; // Tolerancja 5% (trasa jest OK, jeśli jest w zakresie 95% - 100% docelowej długości)
+        const TOLERANCE = 0.05; // Tolerancja 5% (trasa jest OK, jeśli jest w zakresie 95% - 105% docelowej długości)
+        const MAX_OVERLENGTH_FACTOR = 1.15; // Nowy limit: Maksymalny akceptowalny dystans to 115% celu (np. 11.5 km dla 10 km)
 
         let currentRadiusFactor = INITIAL_RADIUS_FACTOR;
         let bestRoute = null;
+        let minDifference = Infinity; // Śledzenie minimalnej różnicy do celu
         let lastDistanceValue = 0;
 
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             
-            // 🚨 Poprawka: Generowanie nowego, losowego kierunku w każdej próbie
+            // Generowanie nowego, losowego kierunku w każdej próbie, aby urozmaicić trasę
             const randomBearing = Math.floor(Math.random() * 360); 
 
             console.log(`Próba ${attempt}: Współczynnik promienia: ${currentRadiusFactor.toFixed(2)}, Kierunek: ${randomBearing}°`);
@@ -151,7 +153,7 @@ app.post('/routes/generate', async (req, res) => {
 
             console.log(`Dystans uzyskany w próbie ${attempt}: ${(totalDistanceValue / 1000).toFixed(2)} km`);
 
-            // Sprawdzenie warunku sukcesu: Trasa jest >= 95% i <= 105% docelowej
+            // 1. Sprawdzenie warunku sukcesu (w ramach 5% tolerancji)
             if (totalDistanceValue >= TARGET_DISTANCE * (1 - TOLERANCE) && totalDistanceValue <= TARGET_DISTANCE * (1 + TOLERANCE)) {
                 
                 bestRoute = { data, totalDistanceValue };
@@ -159,17 +161,25 @@ app.post('/routes/generate', async (req, res) => {
                 break; // Znaleziono satysfakcjonującą trasę
             }
 
-            // Zachowaj najlepszą (najdłuższą) dotychczasową trasę
-            if (!bestRoute || totalDistanceValue > bestRoute.totalDistanceValue) {
-                bestRoute = { data, totalDistanceValue }; 
+            // 2. Zachowaj najlepszą (najbliższą celu) trasę, ale odrzuć te zbyt długie (powyżej 115% celu)
+            if (totalDistanceValue <= TARGET_DISTANCE * MAX_OVERLENGTH_FACTOR) {
+                const currentDifference = Math.abs(totalDistanceValue - TARGET_DISTANCE);
+                
+                if (currentDifference < minDifference) {
+                    minDifference = currentDifference;
+                    bestRoute = { data, totalDistanceValue }; 
+                    console.log(`Zapisano nową najlepszą trasę w próbie ${attempt}. Różnica: ${currentDifference}m.`);
+                }
+            } else {
+                console.log(`Trasa w próbie ${attempt} zbyt długa (${(totalDistanceValue / 1000).toFixed(2)} km) - Odrzucono.`);
             }
             
-            // Korekta na następną iterację: Zwiększ promień, jeśli ostatnia trasa była zbyt krótka.
-            // Zwiększamy promień, jeśli nawet najdłuższa dotychczasowa trasa była za krótka.
+            // 3. Korekta na następną iterację:
+            // Zwiększamy promień, jeśli uzyskany dystans jest za krótki, lub zmniejszamy, jeśli jest za długi.
             if (totalDistanceValue < TARGET_DISTANCE) {
                 currentRadiusFactor *= CORRECTION_FACTOR;
             } else {
-                 // Jeśli dystans był za duży, zmniejsz promień, ale kontynuuj losowanie kierunku
+                 // Jeśli dystans był za duży, zmniejsz promień
                  currentRadiusFactor /= CORRECTION_FACTOR;
             }
             
@@ -181,7 +191,7 @@ app.post('/routes/generate', async (req, res) => {
         if (!bestRoute) {
              return res.status(500).json({ 
                 error: 'Nie udało się wyznaczyć sensownej trasy', 
-                details: 'Google Directions API nie było w stanie znaleźć pętli zbliżonej do docelowego dystansu po kilku próbach.' 
+                details: 'Google Directions API nie było w stanie znaleźć pętli zbliżonej do docelowego dystansu po kilku próbach, a wszystkie znalezione trasy były zbyt długie.' 
             });
         }
         
