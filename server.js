@@ -101,14 +101,18 @@ app.post('/routes/generate', async (req, res) => {
 
         let currentRadiusFactor = INITIAL_RADIUS_FACTOR;
         let bestRoute = null;
+        let lastDistanceValue = 0;
 
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            console.log(`Próba ${attempt}: Współczynnik promienia: ${currentRadiusFactor}`);
+            
+            // 🚨 Poprawka: Generowanie nowego, losowego kierunku w każdej próbie
+            const randomBearing = Math.floor(Math.random() * 360); 
+
+            console.log(`Próba ${attempt}: Współczynnik promienia: ${currentRadiusFactor.toFixed(2)}, Kierunek: ${randomBearing}°`);
             
             // Obliczanie nowego promienia i punktu pośredniego
             const radiusMeters = TARGET_DISTANCE * currentRadiusFactor;
-            const randomBearing = Math.floor(Math.random() * 360); // Losowy kierunek dla urozmaicenia trasy
-
+            
             const intermediatePoint = calculateDestination(
                 startLocation.lat, 
                 startLocation.lng, 
@@ -145,22 +149,31 @@ app.post('/routes/generate', async (req, res) => {
                 totalDistanceValue += leg.distance.value;
             });
 
-            console.log(`Dystans uzyskany w próbie ${attempt}: ${totalDistanceValue}m`);
+            console.log(`Dystans uzyskany w próbie ${attempt}: ${(totalDistanceValue / 1000).toFixed(2)} km`);
 
             // Sprawdzenie warunku sukcesu: Trasa jest >= 95% i <= 105% docelowej
             if (totalDistanceValue >= TARGET_DISTANCE * (1 - TOLERANCE) && totalDistanceValue <= TARGET_DISTANCE * (1 + TOLERANCE)) {
                 
                 bestRoute = { data, totalDistanceValue };
-                console.log(`Trasa dopasowana w próbie ${attempt}! Dystans: ${totalDistanceValue}m`);
+                console.log(`Trasa dopasowana w próbie ${attempt}! Dystans: ${(totalDistanceValue / 1000).toFixed(2)} km`);
                 break; // Znaleziono satysfakcjonującą trasę
             }
 
+            // Zachowaj najlepszą (najdłuższą) dotychczasową trasę
             if (!bestRoute || totalDistanceValue > bestRoute.totalDistanceValue) {
-                bestRoute = { data, totalDistanceValue }; // Zachowaj najlepszą (najdłuższą) dotychczasową trasę
+                bestRoute = { data, totalDistanceValue }; 
             }
-
-            // Korekta na następną iterację: Zwiększ promień, jeśli trasa jest za krótka
-            currentRadiusFactor *= CORRECTION_FACTOR;
+            
+            // Korekta na następną iterację: Zwiększ promień, jeśli ostatnia trasa była zbyt krótka.
+            // Zwiększamy promień, jeśli nawet najdłuższa dotychczasowa trasa była za krótka.
+            if (totalDistanceValue < TARGET_DISTANCE) {
+                currentRadiusFactor *= CORRECTION_FACTOR;
+            } else {
+                 // Jeśli dystans był za duży, zmniejsz promień, ale kontynuuj losowanie kierunku
+                 currentRadiusFactor /= CORRECTION_FACTOR;
+            }
+            
+            lastDistanceValue = totalDistanceValue;
         }
 
 
@@ -181,7 +194,7 @@ app.post('/routes/generate', async (req, res) => {
             distance_km: (bestRoute.totalDistanceValue / 1000).toFixed(2),
             message: `Wyznaczono pętlę o dystansie ${totalDistanceText}. Docelowy dystans: ${(TARGET_DISTANCE / 1000).toFixed(2)} km.`,
             polyline: data.routes[0].overview_polyline.points,
-            details: `Wyznaczono pętlę A -> B -> A po ${bestRoute.totalDistanceValue / 1000} km.`
+            details: `Wyznaczono pętlę A -> B -> A po ${(bestRoute.totalDistanceValue / 1000).toFixed(2)} km.`
         });
 
     } catch (error) {
