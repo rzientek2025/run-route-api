@@ -79,8 +79,8 @@
     </div>
 
     <script>
-        // UWAGA: Zmienna globalna dla adresu URL API, który jest ustawiany dynamicznie
-        let apiUrlBase = ''; 
+        // UWAGA: Stała ścieżka do endpointu API (adres względny)
+        const API_ROUTE_URL = '/routes/generate'; 
 
         // Klucz API Google Maps JS API jest wymagany tutaj:
         const GMAPS_API_KEY = "AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI"; // ZMIEŃ!
@@ -88,7 +88,6 @@
         let map;
         let polyline;
         let startMarker;
-        let apiRouteUrl;
 
         const originInput = document.getElementById('origin');
         const distanceInput = document.getElementById('distance');
@@ -99,27 +98,8 @@
         const loadingMessage = document.getElementById('loading-message');
 
 
-        // --- FIREBASE/API SETUP (Dynamiczne pobieranie adresu API) ---
-        async function fetchApiUrl() {
-            try {
-                // Zakładamy, że frontend jest serwowany z tego samego hosta co API, 
-                // lub że API udostępniło swój adres poprzez route /
-                const response = await fetch('/');
-                if (response.ok) {
-                    const data = await response.json();
-                    // Używamy dynamicznego adresu API z odpowiedzi serwera Node.js
-                    apiRouteUrl = `${data.api_url}/routes/generate`;
-                    console.log(`API Route URL: ${apiRouteUrl}`);
-                } else {
-                    // W środowisku dev/local można użyć statycznego adresu:
-                    apiRouteUrl = 'http://localhost:8080/routes/generate'; 
-                    console.warn("Nie udało się pobrać dynamicznego URL API. Używam domyślnego:", apiRouteUrl);
-                }
-            } catch (error) {
-                apiRouteUrl = 'http://localhost:8080/routes/generate';
-                console.error('Błąd pobierania adresu API, używam domyślnego:', error);
-            }
-        }
+        // --- FIREBASE/API SETUP (Poprawiony: używamy adresu względnego) ---
+        // Usunąłem fetchApiUrl, ponieważ korzystamy ze ścieżki względnej, która działa na tym samym hoście.
         
         // --- FUNKCJE MAPY ---
 
@@ -263,7 +243,8 @@
             displayMessage('default', 'Wysyłanie żądania do serwera...');
             
             try {
-                const response = await fetch(apiRouteUrl, {
+                // Użycie stałego adresu względnego API_ROUTE_URL
+                const response = await fetch(API_ROUTE_URL, { 
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -291,15 +272,14 @@
 
             } catch (error) {
                 console.error('Błąd komunikacji z serwerem:', error);
-                displayMessage('error', `Błąd komunikacji z API: ${error.message}. Sprawdź, czy serwer Node.js działa i czy adres URL (${apiRouteUrl}) jest poprawny.`);
+                displayMessage('error', `Błąd komunikacji z API: ${error.message}. Używam adresu względnego: ${API_ROUTE_URL}`);
             } finally {
                 setLoading(false);
             }
         });
 
         // --- INICJALIZACJA ---
-        window.onload = async function() {
-            await fetchApiUrl(); // Ustawienie adresu API
+        window.onload = function() {
             // Ładowanie Google Maps JS API (z kodami do dekodowania polyline)
             const script = document.createElement('script');
             script.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_API_KEY}&callback=initMap&libraries=geometry`;
