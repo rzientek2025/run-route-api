@@ -98,6 +98,7 @@ app.post('/routes/generate', async (req, res) => {
         const INITIAL_RADIUS_FACTOR = 0.25; // Początkowy promień to 25% dystansu
         const CORRECTION_FACTOR = 1.25; // Współczynnik zwiększenia promienia przy każdej nieudanej próbie (25% więcej)
         const TOLERANCE = 0.05; // Tolerancja 5% (trasa jest OK, jeśli jest w zakresie 95% - 100% docelowej długości)
+        const MAX_OVERLENGTH_FACTOR = 1.15;
 
         let currentRadiusFactor = INITIAL_RADIUS_FACTOR;
         let bestRoute = null;
