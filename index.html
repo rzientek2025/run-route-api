@@ -3,315 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generator Pętli Biegowych</title>
-    <!-- Ładowanie Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Generator Pętli Pieszych</title>
+    
+<script defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI&callback=initMap&libraries=geometry&loading=async">
+    </script>
+    
     <style>
-        /* Ustawienia widoku i font */
-        body { font-family: 'Inter', sans-serif; }
-        #map { height: 70vh; width: 100%; border-radius: 0.5rem; margin-top: 1rem; }
-        .loading-overlay {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(255, 255, 255, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            z-index: 10;
-            border-radius: 0.75rem;
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { 
+            display: block; width: 100%; padding: 10px; margin-top: 20px; 
+            background-color: #007bff; color: white; border: none; border-radius: 4px; 
+            cursor: pointer; font-size: 16px; transition: background-color 0.3s;
+        }
+        button:hover { background-color: #0056b3; }
+        #results { margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
+        .error { color: #dc3545; font-weight: bold; }
+        #map {
+            height: 400px; 
+            width: 100%;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen p-4 sm:p-8">
+<body>
+    <div class="container">
+        <h1>Generator Pętli Pieszych</h1>
 
-    <div class="max-w-4xl mx-auto">
-        <header class="text-center mb-8">
-            <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Generator Pętli Biegowych</h1>
-            <p class="text-gray-500 mt-2">Wprowadź punkt startowy i docelowy dystans, a my wyznaczymy dla Ciebie idealną pętlę.</p>
-        </header>
+        <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
+        
+        <label for="origin">Punkt Startowy (Adres lub Lat,Lng):</label>
+        <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa">
 
-        <div id="controls" class="bg-white p-6 rounded-xl shadow-lg relative">
-            
-            <!-- Obszar ładowania -->
-            <div id="loading-overlay" class="loading-overlay hidden">
-                <div class="animate-spin rounded-full h-12 w-12 border-4 border-t-4 border-blue-500 border-t-transparent mb-3"></div>
-                <p id="loading-message" class="text-blue-600 font-semibold">Generowanie trasy... (Może potrwać do 10 sekund)</p>
-            </div>
+        <label for="distance">Docelowy Dystans Pętli (km):</label>
+        <input type="number" id="distance" value="10" placeholder="np. 10" min="1">
+        <button onclick="generateRoute()">Wyznacz Trasę Pętli</button>
 
-            <!-- Formularz -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                
-                <!-- Pole Adres Startowy -->
-                <div class="col-span-1 md:col-span-2 relative">
-                    <label for="origin" class="block text-sm font-medium text-gray-700 mb-1">Adres Startowy / Współrzędne</label>
-                    <input type="text" id="origin" value="Plac Piłsudskiego, Warszawa" placeholder="Np. Kraków, Rynek Główny 1" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                    <button id="use-location-btn" class="absolute right-2 top-9 bg-blue-500 text-white p-1 rounded-full hover:bg-blue-600 transition duration-150" title="Użyj obecnej lokalizacji">
-                        <!-- Icon: Location pin (lucide-react equivalent) -->
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
-                            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-                            <circle cx="12" cy="10" r="3"/>
-                        </svg>
-                    </button>
-                </div>
-                
-                <!-- Pole Dystans -->
-                <div>
-                    <label for="distance" class="block text-sm font-medium text-gray-700 mb-1">Dystans (km)</label>
-                    <input type="number" id="distance" value="10" min="1" step="0.5" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                </div>
-
-                <!-- Przycisk Generowania -->
-                <div class="col-span-full mt-4">
-                    <button id="generate-btn" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition duration-200 shadow-md">
-                        Generuj Pętlę
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Panel Wiadomości/Błędów -->
-            <div id="message-panel" class="mt-6 p-3 rounded-lg text-sm hidden" role="alert"></div>
-
-        </div>
-
-        <!-- Mapa -->
+        <h2>Wyniki Tekstowe:</h2>
+        <div id="results">Czekam na dane...</div>
+        
         <div id="map"></div>
     </div>
 
     <script>
-        // UWAGA: Stała ścieżka do endpointu API (adres względny)
-        const API_ROUTE_URL = '/routes/generate'; 
+        let map; 
+        let routePolyline; 
 
-        // Klucz API Google Maps JS API jest wymagany tutaj:
-        // Pamiętaj, że musisz wkleić swój klucz!
-        const GMAPS_API_KEY = "AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI"; 
-        
-        let map;
-        let polyline;
-        let startMarker; // Zmieniamy to na nową instancję AdvancedMarkerElement
-        let MarkerElement; // Nowa klasa do przechowywania AdvancedMarkerElement
-
-        const originInput = document.getElementById('origin');
-        const distanceInput = document.getElementById('distance');
-        const generateBtn = document.getElementById('generate-btn');
-        const useLocationBtn = document.getElementById('use-location-btn');
-        const messagePanel = document.getElementById('message-panel');
-        const loadingOverlay = document.getElementById('loading-overlay');
-        const loadingMessage = document.getElementById('loading-message');
-
-        // Funkcja inicjalizująca Mapę Google
-        async function initMap() {
-            // Domyślna lokalizacja (np. Warszawa)
-            const defaultLocation = { lat: 52.237, lng: 21.017 }; 
-            
-            // Wymagana, aby załadować nową klasę markerów
-            const { Map } = await google.maps.importLibrary("maps");
-            MarkerElement = await google.maps.importLibrary("marker");
-            
-            map = new Map(document.getElementById("map"), {
-                zoom: 12,
-                center: defaultLocation,
-                mapId: 'DEMO_MAP_ID', // Użyj ID mapy
-            });
-            
-            // Inicjalizacja pustej linii trasy
-            polyline = new google.maps.Polyline({
-                strokeColor: '#0066FF',
-                strokeOpacity: 0.8,
-                strokeWeight: 5,
-                map: map,
-            });
-            
-            // Inicjalizacja nowego markera
-            startMarker = new MarkerElement.AdvancedMarkerElement({
-                map: map,
-                position: defaultLocation,
-                title: "Punkt Startowy"
-            });
-        }
-        
-        // --- FUNKCJE MAPY ---
-        
-        function updateMap(encodedPolyline, distanceKm, latLng) {
-            // Dekodowanie Polylines
-            const path = google.maps.geometry.encoding.decodePath(encodedPolyline);
-            
-            // Aktualizacja linii
-            polyline.setPath(path);
-            
-            // Ustawienie markera startowego
-            const startPoint = latLng ? new google.maps.LatLng(latLng.lat, latLng.lng) : path[0];
-            
-            // Używamy nowej metody ustawiania pozycji dla AdvancedMarkerElement
-            startMarker.position = startPoint;
-            startMarker.map = map; // Upewnienie się, że jest na mapie
-            
-            // Wyśrodkowanie mapy i dopasowanie granic
-            if (path.length > 0) {
-                const bounds = new google.maps.LatLngBounds();
-                path.forEach(point => bounds.extend(point));
-                map.fitBounds(bounds);
-            }
-        }
-
-        // --- OBSŁUGA BŁĘDÓW/Wiadomości ---
-
-        function displayMessage(type, text) {
-            messagePanel.classList.remove('hidden', 'bg-red-100', 'text-red-800', 'bg-green-100', 'text-green-800', 'bg-blue-100', 'text-blue-800');
-            messagePanel.innerHTML = text;
-            
-            if (type === 'error') {
-                messagePanel.classList.add('bg-red-100', 'text-red-800');
-            } else if (type === 'success') {
-                messagePanel.classList.add('bg-green-100', 'text-green-800');
-            } else {
-                messagePanel.classList.add('bg-blue-100', 'text-blue-800');
-            }
-        }
-        
-        function setLoading(isLoading, message = "Generowanie trasy...") {
-            if (isLoading) {
-                loadingMessage.textContent = message;
-                loadingOverlay.classList.remove('hidden');
-                generateBtn.disabled = true;
-                useLocationBtn.disabled = true;
-            } else {
-                loadingOverlay.classList.add('hidden');
-                generateBtn.disabled = false;
-                useLocationBtn.disabled = false;
-            }
-        }
-
-        // --- LOGIKA GEOLOKALIZACJI ---
-
-        useLocationBtn.addEventListener('click', () => {
-            if (!navigator.geolocation) {
-                displayMessage('error', 'Twoja przeglądarka nie wspiera geolokalizacji.');
-                return;
-            }
-
-            setLoading(true, "Pobieranie obecnej lokalizacji...");
-            
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    setLoading(false);
-                    const lat = position.coords.latitude.toFixed(6);
-                    const lng = position.coords.longitude.toFixed(6);
-                    
-                    // Wstawienie współrzędnych do pola input
-                    originInput.value = `${lat},${lng}`;
-                    displayMessage('success', `Lokalizacja ustawiona na: ${lat}, ${lng}.`);
-                    
-                    // Ustawienie mapy na obecną lokalizację
-                    const currentLatLng = { lat: parseFloat(lat), lng: parseFloat(lng) };
-                    map.setCenter(currentLatLng);
-                    map.setZoom(14); 
-                    
-                    // Ustawienie markera na obecnej lokalizacji
-                    startMarker.position = currentLatLng;
-                    startMarker.map = map;
-
-                },
-                (error) => {
-                    setLoading(false);
-                    let errorMessage;
-                    if (error.code === error.PERMISSION_DENIED) {
-                        errorMessage = "Odmowa dostępu do geolokalizacji. Wprowadź adres ręcznie.";
-                    } else if (error.code === error.POSITION_UNAVAILABLE) {
-                        errorMessage = "Informacja o lokalizacji jest niedostępna.";
-                    } else {
-                        errorMessage = `Wystąpił nieznany błąd geolokalizacji: ${error.message}`;
-                    }
-                    displayMessage('error', errorMessage);
-                }
-            );
-        });
-
-        // --- LOGIKA GENEROWANIA TRASY ---
-
-        generateBtn.addEventListener('click', async () => {
-            const origin = originInput.value.trim();
-            // Konwersja km na metry dla API Node.js
-            const distanceKm = parseFloat(distanceInput.value);
-            const distanceMeters = distanceKm * 1000; 
-
-            if (!origin || distanceMeters <= 0 || isNaN(distanceMeters)) {
-                displayMessage('error', 'Wprowadź poprawny adres startowy i dystans w kilometrach.');
-                return;
-            }
-
-            setLoading(true);
-            displayMessage('default', 'Wysyłanie żądania do serwera...');
-            
-            try {
-                // Użycie stałego adresu względnego API_ROUTE_URL
-                const response = await fetch(API_ROUTE_URL, { 
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ origin: origin, distance: distanceMeters }),
+        // Funkcja inicjalizująca mapę (wywoływana przez API Google)
+        function initMap() {
+            if (!map) {
+                map = new google.maps.Map(document.getElementById('map'), {
+                    center: { lat: 52.23, lng: 21.01 },
+                    zoom: 12,
                 });
-                
-                // Sprawdzenie, czy odpowiedź ma status OK
+                console.log("Mapa została zainicjowana!");
+            }
+        }
+
+        // Funkcja usuwająca starą trasę
+        function clearRoute() {
+            if (routePolyline) {
+                routePolyline.setMap(null);
+                routePolyline = null;
+            }
+        }
+        
+        function drawRoute(encodedPolyline) {
+            if (!map) {
+                initMap();
+            }
+
+            if (!map) {
+                 console.error("Mapa jest null.");
+                 return;
+            }
+            
+            clearRoute(); 
+
+            // Rysowanie
+            const path = google.maps.geometry.encoding.decodePath(encodedPolyline);
+            routePolyline = new google.maps.Polyline({
+                path: path,
+                geodesic: true,
+                strokeColor: '#FF0000', 
+                strokeOpacity: 1.0,
+                strokeWeight: 4
+            });
+
+            routePolyline.setMap(map);
+
+            // Dopasowanie widoku mapy
+            const bounds = new google.maps.LatLngBounds();
+            for (let i = 0; i < path.length; i++) {
+                bounds.extend(path[i]);
+            }
+            map.fitBounds(bounds);
+        }
+
+        async function generateRoute() {
+            const apiUrlElement = document.getElementById('api-url');
+            const apiUrl = apiUrlElement.value;
+            const origin = document.getElementById('origin').value;
+            const distance = document.getElementById('distance').value; // NOWE: POBIERANIE DYSTANSU
+            
+            // Walidacja dystansu
+            if (isNaN(parseFloat(distance)) || parseFloat(distance) <= 0) {
+                document.getElementById('results').innerHTML = '<span class="error">BŁĄD: Dystans musi być liczbą większą niż 0.</span>';
+                return;
+            }
+
+            const resultsDiv = document.getElementById('results');
+            
+            resultsDiv.innerHTML = "Wysyłam zapytanie do API...";
+            clearRoute(); 
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        origin: origin, 
+                        distance: parseFloat(distance) * 1000 // WYSYŁAMY DO API W METRACH
+                    })
+                });
+
+                const data = await response.json();
+
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    displayMessage('error', `BŁĄD SERWERA (${response.status}): Serwer zwrócił status błędu. Najprawdopodobniej ${response.status === 405 ? 'metoda POST nie jest obsługiwana' : 'inna konfiguracja'}. Odpowiedź: ${errorText.substring(0, 100)}...`);
+                    resultsDiv.innerHTML = `<span class="error">BŁĄD: ${data.error || 'Nieznany błąd'}</span>\nSzczegóły: ${data.details || 'Brak'}`;
                     return;
                 }
 
-                // Sprawdzenie nagłówka Content-Type przed próbą parsowania jako JSON
-                const contentType = response.headers.get("content-type");
-                if (contentType && contentType.indexOf("application/json") !== -1) {
-                    const result = await response.json();
-
-                    if (result.error) {
-                        // Obsługa błędów zwróconych przez Node.js API (np. REQUEST_DENIED, błąd geolokalizacji)
-                        const errorDetails = result.details || 'Brak szczegółów błędu.';
-                        displayMessage('error', `BŁĄD: ${result.error}. Szczegóły: ${errorDetails}`);
-                        return;
-                    }
-
-                    // Sukces: Aktualizacja mapy i wyświetlenie wiadomości
-                    displayMessage('success', `${result.message} Wyznaczona trasa: ${result.distance_km} km. Zobacz trasę na mapie.`);
-                    
-                    // Ustalenie lokalizacji startowej na podstawie pierwszej współrzędnej polyline
-                    const tempPath = google.maps.geometry.encoding.decodePath(result.polyline);
-                    const firstPoint = tempPath[0];
-                    const startCoords = { lat: firstPoint.lat(), lng: firstPoint.lng() };
-
-                    updateMap(result.polyline, result.distance_km, startCoords);
-
-                } else {
-                     const errorText = await response.text();
-                     displayMessage('error', `BŁĄD PARSOWANIA: Oczekiwano JSON, otrzymano ${contentType || 'brak typu'}. Otrzymano HTML. Sprawdź logs serwera.`);
-                     console.error("Otrzymana odpowiedź serwera (może być HTML):", errorText.substring(0, 500));
-                }
+                // Sukces
+                resultsDiv.innerHTML = `
+                    <p style="color:#28a745; font-weight: bold;">STATUS: ${data.status}</p>
+                    <p><strong>Dystans:</strong> ${data.distance_km} km</p>
+                    <p><strong>Message:</strong> ${data.message}</p>
+                    <p><strong>Poliline (Fragment):</strong> ${data.polyline.substring(0, 50)}... [${data.polyline.length} znaków]</p>
+                `;
+                
+                drawRoute(data.polyline);
 
             } catch (error) {
-                console.error('Błąd komunikacji z serwerem:', error);
-                displayMessage('error', `Błąd komunikacji z API: ${error.message}. Adres: ${API_ROUTE_URL}. Sprawdź, czy serwer działa.`);
-            } finally {
-                setLoading(false);
+                resultsDiv.innerHTML = `<span class="error">BŁĄD SIECI: Nie udało się połączyć z API.</span>\nSprawdź, czy serwer działa i adres URL jest poprawny.\nSzczegóły: ${error.message}`;
             }
-        });
-
-        // --- INICJALIZACJA ---
-        window.onload = function() {
-            // Ładowanie Google Maps JS API (ASYNC)
-            const script = document.createElement('script');
-            // Dodajemy 'marker' do libraries i 'async'
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_API_KEY}&callback=initMap&libraries=geometry,marker&loading=async`;
-            document.head.appendChild(script);
-
-            // Wyświetlenie ostrzeżenia o kluczu
-            if (GMAPS_API_KEY === "YOUR_GOOGLE_MAPS_API_KEY") {
-                 displayMessage('error', 'KRYTYCZNY BŁĄD KONFIGURACJI: Wymagany jest klucz Google Maps JavaScript API (z modułem geometry i marker). Wklej go do pliku index.html.');
-            } else {
-                 displayMessage('default', 'Wprowadź adres i dystans lub użyj geolokalizacji, aby rozpocząć.');
-            }
-        };
-
+        }
     </script>
 </body>
 </html>
