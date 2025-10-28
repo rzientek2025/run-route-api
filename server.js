@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 8080;
 // Ustawienia CORS: Zezwól na połączenia z dowolnego źródła
 app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'POST', 'OPTIONS'], // Zapewniamy, że OPTIONS jest dozwolone
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -49,6 +49,16 @@ app.get('/', (req, res) => {
         message: 'Użyj POST do /routes/generate.',
         api_url: `http://${req.headers.host}` // Dynamiczne pobieranie adresu hosta
     });
+});
+
+// Dodajemy jawną obsługę OPTIONS dla tej trasy, aby ułatwić CORS
+app.options('/routes/generate', (req, res) => {
+    res.set({
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    });
+    res.sendStatus(200);
 });
 
 // WŁAŚCIWA TRASA API - UŻYWA POST!
