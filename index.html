@@ -40,9 +40,15 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
                 <div class="col-span-1 md:col-span-2 relative">
-                    <label for="origin" class="block text-sm font-medium text-gray-700 mb-1">Adres Startowy</label>
+                    <label for="origin" class="block text-sm font-medium text-gray-700 mb-1">Adres Startowy / Współrzędne</label>
                     <input type="text" id="origin" value="Plac Piłsudskiego, Warszawa" placeholder="Np. Kraków, Rynek Główny 1" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                    </div>
+                    <button id="use-location-btn" class="absolute right-2 top-9 bg-blue-500 text-white p-1 rounded-full hover:bg-blue-600 transition duration-150" title="Użyj obecnej lokalizacji">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+                            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                            <circle cx="12" cy="10" r="3"/>
+                        </svg>
+                    </button>
+                </div>
                 
                 <div>
                     <label for="distance" class="block text-sm font-medium text-gray-700 mb-1">Dystans (km)</label>
@@ -64,8 +70,8 @@
     </div>
 
     <script>
-        // UWAGA: Stała ścieżka do endpointu API
-        const API_ROUTE_URL = '/routes/generate'; 
+        // UWAGA: Zsynchronizowana, uproszczona ścieżka GET
+        const API_ROUTE_URL = '/generate'; 
 
         // Klucz API Google Maps JS API jest wymagany tutaj:
         const GMAPS_API_KEY = "AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI"; 
@@ -73,10 +79,12 @@
         let map;
         let polyline;
         let startMarker; 
+        let MarkerElement; // Dla AdvancedMarkerElement
 
         const originInput = document.getElementById('origin');
         const distanceInput = document.getElementById('distance');
         const generateBtn = document.getElementById('generate-btn');
+        const useLocationBtn = document.getElementById('use-location-btn');
         const messagePanel = document.getElementById('message-panel');
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingMessage = document.getElementById('loading-message');
@@ -84,14 +92,18 @@
 
         // --- FUNKCJE MAPY ---
 
-        function initMap() {
+        async function initMap() {
             // Domyślna lokalizacja (np. Warszawa)
             const defaultLocation = { lat: 52.237, lng: 21.017 }; 
             
-            map = new google.maps.Map(document.getElementById("map"), {
+            // Wymagana, aby załadować nową klasę markerów
+            const { Map } = await google.maps.importLibrary("maps");
+            MarkerElement = await google.maps.importLibrary("marker");
+            
+            map = new Map(document.getElementById("map"), {
                 zoom: 12,
                 center: defaultLocation,
-                mapId: 'DEMO_MAP_ID',
+                mapId: 'DEMO_MAP_ID', 
             });
             
             // Inicjalizacja pustej linii trasy
@@ -102,8 +114,8 @@
                 map: map,
             });
             
-            // Użycie starszego markera dla stabilności
-            startMarker = new google.maps.Marker({
+            // Inicjalizacja nowego markera
+            startMarker = new MarkerElement.AdvancedMarkerElement({
                 map: map,
                 position: defaultLocation,
                 title: "Punkt Startowy"
@@ -118,10 +130,11 @@
             polyline.setPath(path);
             
             // Ustawienie markera startowego
-            const startPoint = latLng ? new google.maps.LatLng(latLng.lat, latLng.lng) : path[0];
+            const startPoint = latLng ? latLng : path[0];
             
-            startMarker.setPosition(startPoint);
-            startMarker.setMap(map);
+            // Używamy nowej metody ustawiania pozycji dla AdvancedMarkerElement
+            startMarker.position = startPoint;
+            startMarker.map = map;
             
             // Wyśrodkowanie mapy i dopasowanie granic
             if (path.length > 0) {
@@ -151,17 +164,61 @@
                 loadingMessage.textContent = message;
                 loadingOverlay.classList.remove('hidden');
                 generateBtn.disabled = true;
+                useLocationBtn.disabled = true;
             } else {
                 loadingOverlay.classList.add('hidden');
                 generateBtn.disabled = false;
+                useLocationBtn.disabled = false;
             }
         }
 
-        // --- LOGIKA GENEROWANIA TRASY (POST) ---
+        // --- LOGIKA GEOLOKALIZACJI ---
+
+        useLocationBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                displayMessage('error', 'Twoja przeglądarka nie wspiera geolokalizacji.');
+                return;
+            }
+
+            setLoading(true, "Pobieranie obecnej lokalizacji...");
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setLoading(false);
+                    const lat = position.coords.latitude.toFixed(6);
+                    const lng = position.coords.longitude.toFixed(6);
+                    
+                    // Wstawienie współrzędnych do pola input w formacie "lat,lng"
+                    originInput.value = `${lat},${lng}`;
+                    displayMessage('success', `Lokalizacja ustawiona na: ${lat}, ${lng}.`);
+                    
+                    // Ustawienie mapy i markera
+                    const currentLatLng = { lat: parseFloat(lat), lng: parseFloat(lng) };
+                    map.setCenter(currentLatLng);
+                    map.setZoom(14); 
+                    startMarker.position = currentLatLng;
+                    startMarker.map = map;
+
+                },
+                (error) => {
+                    setLoading(false);
+                    let errorMessage;
+                    if (error.code === error.PERMISSION_DENIED) {
+                        errorMessage = "Odmowa dostępu do geolokalizacji. Wprowadź adres ręcznie.";
+                    } else if (error.code === error.POSITION_UNAVAILABLE) {
+                        errorMessage = "Informacja o lokalizacji jest niedostępna.";
+                    } else {
+                        errorMessage = `Wystąpił nieznany błąd geolokalizacji: ${error.message}`;
+                    }
+                    displayMessage('error', errorMessage);
+                }
+            );
+        });
+
+        // --- LOGIKA GENEROWANIA TRASY (GET) ---
 
         generateBtn.addEventListener('click', async () => {
             const origin = originInput.value.trim();
-            // Konwersja km na metry dla API Node.js
             const distanceKm = parseFloat(distanceInput.value);
             const distanceMeters = distanceKm * 1000; 
 
@@ -173,17 +230,22 @@
             setLoading(true);
             displayMessage('default', 'Wysyłanie żądania do serwera...');
             
+            // Przygotowanie danych do wysłania
+            const requestBody = {
+                origin: origin,
+                distance: distanceMeters, // wysyłamy w metrach
+            };
+            
+            // Używamy metody GET z Query Parameters
+            const params = new URLSearchParams(requestBody).toString();
+            const apiUrl = `${API_ROUTE_URL}?${params}`;
+
             try {
-                // Żądanie POST
-                const response = await fetch(API_ROUTE_URL, { 
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ origin: origin, distance: distanceMeters }),
+                // Żądanie GET
+                const response = await fetch(apiUrl, { 
+                    method: 'GET',
                 });
                 
-                // Sprawdzenie, czy odpowiedź ma status OK
                 if (!response.ok) {
                     const errorText = await response.text();
                     displayMessage('error', `BŁĄD SERWERA (${response.status}): Serwer zwrócił status błędu. Odpowiedź: ${errorText.substring(0, 100)}...`);
@@ -203,10 +265,10 @@
                     // Sukces: Aktualizacja mapy i wyświetlenie wiadomości
                     displayMessage('success', `${result.message}`);
                     
-                    // Ustalenie lokalizacji startowej na podstawie pierwszej współrzędnej polyline
+                    // Ustalenie lokalizacji startowej
                     const tempPath = google.maps.geometry.encoding.decodePath(result.polyline);
                     const firstPoint = tempPath[0];
-                    const startCoords = { lat: firstPoint.lat(), lng: firstPoint.lng() };
+                    const startCoords = { lat: firstPoint.lat(), lng: firstPoint.lat() }; // Poprawka: użyj lat() i lng()
 
                     updateMap(result.polyline, startCoords);
 
@@ -217,7 +279,7 @@
 
             } catch (error) {
                 console.error('Błąd komunikacji z serwerem:', error);
-                displayMessage('error', `Błąd komunikacji z API: ${error.message}. Sprawdź, czy serwer działa.`);
+                displayMessage('error', `Błąd komunikacji z API: ${error.message}. Adres: ${apiUrl}. Sprawdź, czy serwer działa i obsługuje GET.`);
             } finally {
                 setLoading(false);
             }
@@ -225,16 +287,16 @@
 
         // --- INICJALIZACJA ---
         window.onload = function() {
-            // Ładowanie Google Maps JS API
+            // Ładowanie Google Maps JS API (ASYNC)
             const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_API_KEY}&callback=initMap&libraries=geometry`;
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_API_KEY}&callback=initMap&libraries=geometry,marker&loading=async`;
             document.head.appendChild(script);
 
             // Wyświetlenie ostrzeżenia o kluczu
             if (GMAPS_API_KEY === "YOUR_GOOGLE_MAPS_API_KEY") {
                  displayMessage('error', 'KRYTYCZNY BŁĄD KONFIGURACJI: Wymagany jest klucz Google Maps JavaScript API. Wklej go do pliku index.html.');
             } else {
-                 displayMessage('default', 'Wprowadź adres i dystans, aby wyznaczyć pętlę.');
+                 displayMessage('default', 'Wprowadź adres i dystans lub użyj geolokalizacji, aby rozpocząć.');
             }
         };
 
