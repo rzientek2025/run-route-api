@@ -4,373 +4,319 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generator Pętli Pieszych</title>
-    
-    <!-- Ładowanie Google Maps JS API z kluczem i biblioteką geometry -->
-    <script defer
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI&callback=initMap&libraries=geometry&loading=async">
-    </script>
-    
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Ustawienie czcionki, która wspiera polskie znaki */
-        body { font-family: 'Arial', 'Helvetica Neue', Arial, sans-serif; margin: 0; background-color: #f4f4f9; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 20px 0; }
-        
-        .container { 
-            width: 100%;
-            max-width: 900px; 
-            margin: auto; 
-            background: white; 
-            padding: 25px; 
-            border-radius: 12px; 
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15); 
+        /* Użycie czcionki wspierającej polskie znaki */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f7f9;
         }
-        
-        h1 { color: #2c3e50; text-align: center; margin-bottom: 25px; }
-        
-        /* Sekcja formularza i mapy */
+        /* Responsywna siatka dla formularza i mapy */
         .content-grid {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 20px;
+            gap: 24px;
+            max-width: 1200px;
+            margin: 24px auto;
+            padding: 0 16px;
         }
-
-        @media (min-width: 768px) {
+        @media (min-width: 1024px) {
             .content-grid {
-                grid-template-columns: 1fr 1.5fr; /* Więcej miejsca dla mapy na desktopach */
+                grid-template-columns: 1fr 2fr; /* Formularz 1/3, Mapa 2/3 */
             }
         }
-
-        .form-section {
-            background-color: #ecf0f1;
-            padding: 20px;
-            border-radius: 8px;
-        }
-
-        label { display: block; margin-top: 15px; font-weight: 600; color: #34495e; }
-        
-        /* Kontener dla pola adresu i przycisku lokalizacji */
-        .input-group { position: relative; display: flex; align-items: center; margin-top: 5px; }
-        
-        input[type="text"], input[type="number"], select { 
-            flex-grow: 1;
-            padding: 12px; 
-            border: 1px solid #bdc3c7; 
-            border-radius: 6px; 
-            box-sizing: border-box; 
-            transition: border-color 0.3s;
-        }
-        
-        input[type="text"]:focus, input[type="number"]:focus, select:focus {
-            border-color: #3498db;
-            outline: none;
-        }
-
-        /* Styl dla przycisku Lokalizacji */
-        #use-location-btn {
-            padding: 12px 15px;
-            margin-left: 10px; /* Odstęp od pola tekstowego */
-            width: auto; 
-            background-color: #2ecc71; /* Zielony kolor */
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background-color 0.3s, transform 0.1s;
-        }
-
-        #use-location-btn:hover {
-            background-color: #27ae60;
-        }
-        #use-location-btn:active {
-            transform: scale(0.98);
-        }
-
-        button.main-action { 
-            display: block; width: 100%; padding: 15px; margin-top: 30px; 
-            background-color: #3498db; color: white; border: none; border-radius: 6px; 
-            cursor: pointer; font-size: 18px; font-weight: bold;
-            transition: background-color 0.3s;
-        }
-        button.main-action:hover { background-color: #2980b9; }
-
-        /* Sekcja Wyników */
-        #results-container {
-             margin-top: 20px; 
-             grid-column: 1 / -1; /* Rozciągnij na całą szerokość */
-        }
-
-        #results { 
-            padding: 15px; 
-            background-color: #ecf0f1; 
-            border-radius: 8px; 
-            white-space: pre-wrap; 
-            word-wrap: break-word; 
-            font-size: 14px;
-            min-height: 50px;
-            border: 1px solid #bdc3c7;
-        }
-
-        .message-box {
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 5px;
-        }
-
-        .error { color: #c0392b; font-weight: bold; background-color: #fbdada; border: 1px solid #c0392b; }
-        .success { color: #27ae60; font-weight: bold; background-color: #e9f7ef; border: 1px solid #27ae60; }
-        .info { color: #34495e; background-color: #f0f3f5; }
-
-        /* Sekcja Mapy */
         #map {
-            height: 400px; 
-            width: 100%;
-            border: 1px solid #bdc3c7;
+            height: 600px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            background-color: #e5e5e5;
+        }
+        .form-card {
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        }
+        .input-group {
+            margin-bottom: 16px;
+        }
+        .button-primary {
+            background-color: #3b82f6; /* Blue 500 */
+            color: white;
+            padding: 10px 20px;
             border-radius: 8px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .button-primary:hover {
+            background-color: #2563eb; /* Blue 600 */
+        }
+        .button-secondary {
+            background-color: #6b7280; /* Gray 500 */
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .button-secondary:hover {
+            background-color: #4b5563; /* Gray 600 */
+        }
+        .message-box {
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-weight: 500;
+        }
+        .message-success {
+            background-color: #d1fae5; /* Green 100 */
+            color: #065f46; /* Green 800 */
+        }
+        .message-error {
+            background-color: #fee2e2; /* Red 100 */
+            color: #991b1b; /* Red 800 */
+        }
+        .message-info {
+            background-color: #dbeafe; /* Blue 100 */
+            color: #1e40af; /* Blue 800 */
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Generator Pętli Pieszych </h1>
 
-        <div class="content-grid">
-            <div class="form-section">
-                <!-- Ukryte pole z URL API -->
-                <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
-                
-                <label for="origin">1. Punkt Startowy (Adres lub Współrzędne Lat,Lng):</label>
-                <div class="input-group">
-                    <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa lub 52.23,21.01"> 
-                    <button id="use-location-btn" onclick="useCurrentLocation()" title="Użyj obecnej lokalizacji">
-                         Lokalizacja
-                    </button>
+    <header class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+            <h1 class="text-3xl font-extrabold text-gray-900">Generator Pętli Pieszych</h1>
+            <p class="mt-1 text-sm text-gray-500">Wpisz punkt startowy i pożądany dystans, aby wyznaczyć optymalną pętlę.</p>
+        </div>
+    </header>
+
+    <div class="content-grid">
+        <!-- FORMULARZ STERUJĄCY -->
+        <div class="form-card">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Ustawienia trasy</h2>
+            
+            <div class="input-group">
+                <label for="origin" class="block text-sm font-medium text-gray-700 mb-1">1. Punkt Startowy (Adres lub Lat/Lng)</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="origin" name="origin" placeholder="Np. Dworzec Centralny, Warszawa" class="flex-grow w-full border border-gray-300 p-2 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    <button type="button" class="button-secondary text-sm px-3 py-2 whitespace-nowrap" onclick="geocodeAndSetMarker()">Zaznacz adres</button>
+                    <button type="button" class="button-secondary text-sm px-3 py-2 whitespace-nowrap" onclick="useCurrentLocation()">Moja lokalizacja</button>
                 </div>
+            </div>
 
-                <label for="distance">2. Docelowy Dystans Pętli (km):</label>
-                <input type="number" id="distance" value="10" placeholder="np. 10" min="1">
+            <div class="input-group">
+                <label for="distance" class="block text-sm font-medium text-gray-700 mb-1">2. Docelowy Dystans Pętli (km)</label>
+                <input type="number" id="distance" name="distance" value="10" min="1" step="0.1" class="w-full border border-gray-300 p-2 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+            </div>
 
-                <label for="direction">3. Opcjonalny Kierunek Początkowy:</label>
-                <select id="direction">
-                    <option value="">(Dowolny kierunek)</option>
+            <div class="input-group">
+                <label for="direction" class="block text-sm font-medium text-gray-700 mb-1">3. Opcjonalny Kierunek Początkowy</label>
+                <select id="direction" name="direction" class="w-full border border-gray-300 p-2 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Losowy</option>
                     <option value="N">Północ (N)</option>
                     <option value="E">Wschód (E)</option>
                     <option value="S">Południe (S)</option>
                     <option value="W">Zachód (W)</option>
                 </select>
-                
-                <button class="main-action" onclick="generateRoute()">4. Wyznacz Trasę Pętli</button>
+                <p class="text-xs text-gray-500 mt-1">Sugeruje kierunek, w którym pętla powinna się rozszerzyć.</p>
             </div>
+            
+            <button type="button" class="button-primary w-full mt-4" onclick="generateRoute()">
+                Generuj Pętlę Pieszą
+            </button>
 
-            <div class="map-section">
-                <div id="map"></div>
-            </div>
+            <!-- KOMUNIKATY I WYNIKI -->
+            <div id="messageContainer" class="message-box message-info mt-4 hidden"></div>
+
         </div>
 
-        <div id="results-container">
-            <h2>Wyniki i Status:</h2>
-            <div id="results" class="message-box info">Czekam na dane. Wprowadź dane i kliknij "Wyznacz Trasę Pętli".</div>
-        </div>
+        <!-- MAPA -->
+        <div id="map"></div>
     </div>
 
+    <script src="https://maps.googleapis.com/maps/api/js?key=&callback=initMap" async defer></script>
     <script>
-        let map; 
-        let routePolyline; 
-        let startMarker; 
-
-        // Funkcja do dynamicznego wyświetlania komunikatów
-        function displayMessage(type, text) {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.classList.remove('error', 'success', 'info');
-            resultsDiv.classList.add(type);
-            
-            // W przypadku błędu pokazujemy tylko komunikat, w pozostałych przypadkach formatujemy
-            if (type === 'error') {
-                resultsDiv.innerHTML = text;
-            } else if (type === 'success') {
-                // Dla sukcesu, oczekujemy obiektu zawierającego szczegóły trasy
-                resultsDiv.innerHTML = `
-                    <p><strong>STATUS:</strong> Sukces</p>
-                    <p><strong>Wyznaczony dystans:</strong> ${text.distance_km} km</p>
-                    <p><strong>Wiadomość:</strong> ${text.message}</p>
-                    <p style="font-size: 0.8em; opacity: 0.7;">Poliline: ${text.polyline.substring(0, 50)}... [${text.polyline.length} znaków]</p>
-                `;
-            } else { // info/default
-                 resultsDiv.innerHTML = text;
-            }
-        }
-
-
-        // Funkcja inicjalizująca mapę (wywoływana przez API Google)
-        function initMap() {
-            const defaultCenter = { lat: 52.23, lng: 21.01 }; // Warszawa
-            map = new google.maps.Map(document.getElementById('map'), {
-                center: defaultCenter,
-                zoom: 12,
-            });
-            // Marker startowy
-            startMarker = new google.maps.Marker({
-                position: defaultCenter,
-                map: map,
-                title: "Punkt Startowy",
-                icon: {
-                    url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
-                }
-            });
-            console.log("Mapa została zainicjowana!");
-        }
-
-        // Funkcja usuwająca starą trasę
-        function clearRoute() {
-            if (routePolyline) {
-                routePolyline.setMap(null);
-                routePolyline = null;
-            }
-        }
+        let map;
+        let marker;
+        let directionsRenderer;
+        let geocoder;
         
-        function drawRoute(encodedPolyline, startPoint) {
-            if (!map || !google.maps.geometry) {
-                 displayMessage('error', "BŁĄD: Mapa lub biblioteka geometry jest niedostępna. Upewnij się, że klucz API jest poprawny.");
-                 return;
-            }
-            
-            clearRoute(); 
+        // Funkcja inicjująca mapę (wywoływana przez Google Maps API)
+        function initMap() {
+            // Inicjalizacja Geocodera
+            geocoder = new google.maps.Geocoder();
 
-            // Dekodowanie i rysowanie trasy
-            const path = google.maps.geometry.encoding.decodePath(encodedPolyline);
-            routePolyline = new google.maps.Polyline({
-                path: path,
-                geodesic: true,
-                strokeColor: '#e74c3c', /* Czerwony */
-                strokeOpacity: 1.0,
-                strokeWeight: 5
+            // Ustawienia początkowe mapy (Warszawa)
+            const defaultLocation = { lat: 52.2297, lng: 21.0122 };
+
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 12,
+                center: defaultLocation,
+                mapId: "DEMO_MAP_ID" // Użycie domyślnego ID mapy
             });
 
-            routePolyline.setMap(map);
+            // Renderer trasy
+            directionsRenderer = new google.maps.DirectionsRenderer({ map: map, polylineOptions: { strokeColor: '#10b981', strokeWeight: 6 } });
 
-            // Aktualizacja markera startowego
-            const actualStartPoint = path.length > 0 ? path[0] : startPoint;
-            startMarker.setPosition(actualStartPoint);
-            startMarker.setMap(map); 
-
-            // Dopasowanie widoku mapy
-            const bounds = new google.maps.LatLngBounds();
-            for (let i = 0; i < path.length; i++) {
-                bounds.extend(path[i]);
-            }
-            map.fitBounds(bounds);
+            // Znacznik startowy (domyślnie na Warszawie)
+            marker = new google.maps.Marker({
+                position: defaultLocation,
+                map: map,
+                title: 'Punkt Startowy'
+            });
         }
 
-        // Funkcja do obsługi geolokalizacji
-        function useCurrentLocation() {
-            const originInput = document.getElementById('origin');
-            displayMessage('info', 'Pobieranie obecnej lokalizacji. Proszę zezwolić przeglądarce na dostęp...');
+        // Funkcja wyświetlająca komunikaty
+        function displayMessage(status, text, details = '') {
+            const container = document.getElementById('messageContainer');
+            container.classList.remove('hidden', 'message-success', 'message-error', 'message-info');
+            
+            container.innerHTML = `<strong>STATUS: ${status}</strong><br>${text}`;
+            if (details) {
+                container.innerHTML += `<br><br><small>Szczegóły: ${details}</small>`;
+            }
 
-            if (!navigator.geolocation) {
-                displayMessage('error', 'BŁĄD: Twoja przeglądarka nie wspiera geolokalizacji. Wprowadź adres ręcznie.');
+            if (status === 'OK') {
+                container.classList.add('message-success');
+            } else if (status.startsWith('BŁĄD')) {
+                container.classList.add('message-error');
+            } else {
+                container.classList.add('message-info');
+            }
+        }
+
+        // --- NOWA FUNKCJONALNOŚĆ: GEOKODOWANIE I USTAWIENIE ZNACZNIKA Z ADRESU ---
+        function geocodeAndSetMarker() {
+            const address = document.getElementById('origin').value;
+            if (!address) {
+                displayMessage('BŁĄD', 'Wpisz adres lub współrzędne, aby zaznaczyć punkt startowy na mapie.');
                 return;
             }
 
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const lat = position.coords.latitude.toFixed(6);
-                    const lng = position.coords.longitude.toFixed(6);
+            // Sprawdzenie, czy to już są współrzędne (Lat/Lng)
+            const coordsMatch = address.match(/^(-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)$/);
+            if (coordsMatch) {
+                const lat = parseFloat(coordsMatch[1]);
+                const lng = parseFloat(coordsMatch[3]);
+                const location = { lat: lat, lng: lng };
+                
+                marker.setPosition(location);
+                map.setCenter(location);
+                map.setZoom(14);
+                displayMessage('INFO', `Punkt startowy ustawiony: ${lat.toFixed(6)}, ${lng.toFixed(6)}.`);
+                return;
+            }
+
+            // Geokodowanie adresu
+            geocoder.geocode({ 'address': address }, (results, status) => {
+                if (status === 'OK') {
+                    const location = results[0].geometry.location;
+                    const formattedAddress = results[0].formatted_address;
                     
-                    const coordsString = `${lat},${lng}`;
-                    originInput.value = coordsString;
+                    document.getElementById('origin').value = `${location.lat()}, ${location.lng()}`; // Ustawienie Lat/Lng w polu
                     
-                    displayMessage('info', `Lokalizacja ustawiona na: ${coordsString}. Kliknij "Wyznacz Trasę Pętli".`);
-                    
-                    // Przesuń mapę i marker do nowej lokalizacji
-                    const currentLatLng = { lat: parseFloat(lat), lng: parseFloat(lng) };
-                    map.setCenter(currentLatLng);
-                    map.setZoom(14); 
-                    startMarker.setPosition(currentLatLng);
-                    startMarker.setMap(map);
-                },
-                (error) => {
-                    let errorMessage;
-                    if (error.code === error.PERMISSION_DENIED) {
-                        errorMessage = "BŁĄD: Odmowa dostępu do geolokalizacji. Wprowadź adres ręcznie.";
-                    } else {
-                        errorMessage = `BŁĄD: Geolokalizacja nie powiodła się. ${error.message}.`;
-                    }
-                    displayMessage('error', errorMessage);
+                    marker.setPosition(location);
+                    map.setCenter(location);
+                    map.setZoom(14);
+                    displayMessage('INFO', `Punkt startowy zaznaczony na mapie: ${formattedAddress}.`);
+                } else {
+                    displayMessage('BŁĄD', `Geokodowanie nieudane: ${status}. Sprawdź, czy adres jest poprawny.`);
                 }
-            );
+            });
         }
 
 
-        // Główna funkcja wyznaczająca trasę
+        // Funkcja używająca geolokalizacji przeglądarki
+        function useCurrentLocation() {
+            if (navigator.geolocation) {
+                displayMessage('INFO', 'Lokalizowanie...', 'Proszę zezwolić przeglądarce na dostęp do Twojej lokalizacji.');
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const location = { lat: lat, lng: lng };
+                        
+                        document.getElementById('origin').value = `${lat}, ${lng}`;
+                        
+                        // Ustawienie znacznika i wyśrodkowanie mapy
+                        marker.setPosition(location);
+                        map.setCenter(location);
+                        map.setZoom(14);
+
+                        displayMessage('OK', 'Lokalizacja pobrana pomyślnie.', `Współrzędne: ${lat.toFixed(6)}, ${lng.toFixed(6)}.`);
+                    },
+                    (error) => {
+                        displayMessage('BŁĄD', 'Nie udało się pobrać lokalizacji.', `Kod błędu: ${error.code}. Spróbuj wpisać adres ręcznie.`);
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            } else {
+                displayMessage('BŁĄD', 'Brak wsparcia dla geolokalizacji.', 'Twoja przeglądarka nie obsługuje API geolokalizacji.');
+            }
+        }
+
+        // Funkcja generująca trasę (wysyła żądanie do backendu)
         async function generateRoute() {
-            const apiUrlElement = document.getElementById('api-url');
-            const apiUrl = apiUrlElement.value;
-            const origin = document.getElementById('origin').value.trim();
-            const distance = document.getElementById('distance').value;
-            const direction = document.getElementById('direction').value; // Nowa wartość
+            const origin = document.getElementById('origin').value;
+            const distanceKm = parseFloat(document.getElementById('distance').value);
+            const direction = document.getElementById('direction').value;
             
-            // Walidacja dystansu
-            if (isNaN(parseFloat(distance)) || parseFloat(distance) <= 0) {
-                displayMessage('error', 'BŁĄD: Dystans musi być liczbą większą niż 0.');
-                return;
-            }
-             // Walidacja punktu startowego
-            if (!origin) {
-                displayMessage('error', 'BŁĄD: Punkt startowy nie może być pusty.');
+            if (!origin || isNaN(distanceKm) || distanceKm <= 0) {
+                displayMessage('BŁĄD', 'Wypełnij poprawnie wszystkie pola.', 'Wpisz punkt startowy i poprawny dystans (km).');
                 return;
             }
             
-            displayMessage('info', "Wysyłam zapytanie do API i szukam najlepszej trasy. Może to potrwać kilka sekund...");
-            clearRoute(); 
+            // Konwersja dystansu z km na metry dla API
+            const distanceMeters = distanceKm * 1000; 
+
+            displayMessage('INFO', 'Generowanie pętli...', `Docelowy dystans: ${distanceKm} km. Może to potrwać kilka sekund (do 20 prób).`);
 
             try {
-                // Konwersja z km na metry przed wysłaniem do serwera
-                const distanceMeters = parseFloat(distance) * 1000;
-                
+                // Endpoint do generowania tras w server.js
+                const apiUrl = '/routes/generate'; 
+
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         origin: origin, 
                         distance: distanceMeters,
-                        direction: direction // Dodanie nowego parametru do requestu
+                        direction: direction
                     })
                 });
 
-                const data = await response.json();
+                const result = await response.json();
 
-                if (!response.ok) {
-                    // Obsługa błędu zwróconego przez serwer
-                    displayMessage('error', `BŁĄD SERWERA: ${data.error || 'Nieznany błąd'}\nSzczegóły: ${data.details || 'Brak'}`);
-                    return;
-                }
+                if (response.ok) {
+                    // Sukces
+                    displayMessage('OK', result.message, result.details);
+                    
+                    // Rysowanie trasy
+                    const polyline = result.polyline;
+                    directionsRenderer.setDirections({
+                        routes: [{
+                            overview_polyline: { points: polyline },
+                            // Ustawienie legs na pustą tablicę lub jeden leg, aby DirectionsRenderer działał
+                            legs: [{ start_location: marker.getPosition(), end_location: marker.getPosition() }] 
+                        }]
+                    });
+                    
+                    // Wyśrodkowanie mapy na trasie
+                    map.fitBounds(new google.maps.geometry.encoding.decodePath(polyline).reduce((bounds, coord) => {
+                        return bounds.extend(coord);
+                    }, new google.maps.LatLngBounds()));
 
-                // Sukces
-                displayMessage('success', data);
-                
-                // Lokalizacja startowa (pobieramy z pola, aby Google Directions mogło ją przetworzyć w drawRoute)
-                let startPointLatLng = null; 
-                if (origin.includes(',')) {
-                    const [lat, lng] = origin.split(',').map(c => parseFloat(c.trim()));
-                    if (!isNaN(lat) && !isNaN(lng)) {
-                         startPointLatLng = new google.maps.LatLng(lat, lng);
-                    }
+                } else {
+                    // Błąd z serwera
+                    displayMessage('BŁĄD SERWERA', result.error, result.details);
                 }
-                
-                drawRoute(data.polyline, startPointLatLng);
 
             } catch (error) {
-                displayMessage('error', `BŁĄD SIECI: Nie udało się połączyć z API. Sprawdź konsolę F12, aby zobaczyć szczegóły. Szczegóły: ${error.message}`);
+                console.error('Błąd połączenia z API:', error);
+                displayMessage('BŁĄD POŁĄCZENIA', 'Nie można połączyć się z serwerem API.', error.message);
             }
         }
-
-        // Inicjalizacja mapy po załadowaniu skryptu Google
-        window.initMap = initMap;
-        
-        // Ustawienie domyślnego stanu komunikatu
-        document.addEventListener('DOMContentLoaded', () => {
-             displayMessage('info', "Wprowadź dane i kliknij 'Wyznacz Trasę Pętli' lub 'Lokalizacja' aby zacząć.");
-        });
-
     </script>
 </body>
 </html>
