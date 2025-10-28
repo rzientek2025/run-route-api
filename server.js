@@ -78,11 +78,16 @@ app.post('/routes/generate', async (req, res) => {
                 key: process.env.GOOGLE_API_KEY
             }
         });
-
+        
+        // 🚨 DIAGNOSTYKA: Zaloguj pełną odpowiedź, jeśli geokodowanie nie powiodło się
         if (geoResponse.data.status !== 'OK' || geoResponse.data.results.length === 0) {
+            console.error('Błąd geokodowania dla adresu:', origin);
+            console.error('Odpowiedź Google Geocoding Status:', geoResponse.data.status);
+            console.error('Wiadomość błędu Google:', geoResponse.data.error_message);
+            
             return res.status(400).json({ 
                 error: 'Nie udało się geolokalizować punktu startowego.', 
-                details: 'Sprawdź, czy adres jest poprawny.' 
+                details: `Sprawdź, czy adres jest poprawny. Status z Google: ${geoResponse.data.status}.` 
             });
         }
 
