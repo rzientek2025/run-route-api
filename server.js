@@ -9,12 +9,9 @@ const PORT = process.env.PORT || 8080;
 // Ustawienia CORS
 app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
-// Umożliwia Expressowi paroswanie ciała żądania JSON
-app.use(express.json());
 
 // Funkcja pomocnicza: Oblicza nowy punkt (lat/lng)
 function calculateDestination(lat, lng, distanceMeters, bearingDegrees) {
@@ -42,30 +39,65 @@ function calculateDestination(lat, lng, distanceMeters, bearingDegrees) {
 
 // Prosta trasa GET dla testowania działania API
 app.get('/', (req, res) => {
-    res.send({ message: 'API działa. Użyj POST do /routes/generate.', api_url: `http://localhost:${PORT}` });
+    res.send({ message: 'API działa. Użyj GET do /generate z parametrami.', api_url: `http://localhost:${PORT}` });
 });
 
-// Główna trasa API - używa POST
-app.post('/routes/generate', async (req, res) => {
-    const { origin, distance } = req.body; // distance jest w metrach
+// Główna trasa API - UŻYWA GET NA ŚCIEŻCE /generate
+app.get('/generate', async (req, res) => {
+    // Odczyt danych z query parameters (req.query)
+    const { origin, distance } = req.query; 
+    const distanceMeters = parseFloat(distance);
 
-    if (!origin || !distance) {
+    // Walidacja podstawowych parametrów
+    if (!origin || isNaN(distanceMeters) || distanceMeters <= 0) {
         return res.status(400).json({ 
-            error: 'Brak wymaganych pól', 
-            details: 'Wymagane: origin (punkt startowy) i distance (dystans pętli w metrach).' 
+            error: 'Brak wymaganych pól lub nieprawidłowy format', 
+            details: 'Wymagane: origin (adres lub lat,lng) i distance (dystans pętli w metrach).' 
         });
     }
 
     if (!process.env.GOOGLE_API_KEY) {
         return res.status(500).json({ 
             error: 'Błąd konfiguracji serwera', 
-            details: 'Brak zmiennej środowiskowej GOOGLE_API_KEY.' 
+            details: 'Brak zmiennej środowiskowej GOOGLE_API_KEY. Sprawdź ustawienia DigitalOcean.' 
         });
     }
 
-    // --- LOGIKA GENEROWANIA PĘTLI ---
+    // --- ALGORYTM GENEROWANIA PĘTLI ---
+    let startLocation;
 
-    const TARGET_DISTANCE = parseFloat(distance);
+    // 1. Geolokalizacja punktu startowego (lub użycie współrzędnych)
+    if (origin.includes(',')) {
+        const [lat, lng] = origin.split(',').map(Number);
+        startLocation = { lat, lng };
+    } else {
+        try {
+            const geoResponse = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
+                params: {
+                    address: origin,
+                    key: process.env.GOOGLE_API_KEY
+                }
+            });
+
+            if (geoResponse.data.status !== 'OK' || geoResponse.data.results.length === 0) {
+                const status = geoResponse.data.status || 'Nieznany';
+                return res.status(400).json({ 
+                    error: 'Nie udało się geolokalizować punktu startowego.', 
+                    details: 'Sprawdź, czy adres jest poprawny. Status z Google: ' + status,
+                });
+            }
+            startLocation = geoResponse.data.results[0].geometry.location;
+        } catch (error) {
+             return res.status(500).json({ 
+                error: 'Błąd podczas geolokalizacji.', 
+                details: error.message
+            });
+        }
+    }
+
+
+    // PARAMETRY OPTYMALIZACYJNE
+    const TARGET_DISTANCE = distanceMeters;
     const MAX_ATTEMPTS = 5;
     const INITIAL_RADIUS_FACTOR = 0.25; 
     const CORRECTION_FACTOR = 1.2; 
@@ -76,43 +108,7 @@ app.post('/routes/generate', async (req, res) => {
     let minDiff = Infinity;
     let currentRadiusFactor = INITIAL_RADIUS_FACTOR;
 
-    // 1. Geolokalizacja punktu startowego
-    let startLocation;
 
-    // Sprawdzenie, czy to współrzędne (choć frontend wysyła tylko adres w tej stabilnej wersji)
-    const coordsMatch = origin.match(/^(-?\d+\.\d+),(-?\d+\.\d+)$/);
-    if (coordsMatch) {
-        startLocation = {
-            lat: parseFloat(coordsMatch[1]),
-            lng: parseFloat(coordsMatch[2])
-        };
-    } else {
-        // Użyj Geocoding API dla adresu
-        try {
-            const geoResponse = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
-                params: {
-                    address: origin,
-                    key: process.env.GOOGLE_API_KEY
-                }
-            });
-
-            if (geoResponse.data.status !== 'OK' || geoResponse.data.results.length === 0) {
-                return res.status(400).json({ 
-                    error: 'Nie udało się geolokalizować punktu startowego.', 
-                    details: `Status z Google: ${geoResponse.data.status}.` 
-                });
-            }
-            startLocation = geoResponse.data.results[0].geometry.location;
-        } catch (error) {
-            return res.status(500).json({
-                error: 'Błąd podczas geokodowania.',
-                details: error.message
-            });
-        }
-    }
-
-
-    // 2. Algorytm iteracyjny
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
         const randomBearing = Math.floor(Math.random() * 360); 
         const radiusMeters = TARGET_DISTANCE * currentRadiusFactor;
@@ -126,10 +122,10 @@ app.post('/routes/generate', async (req, res) => {
 
         const intermediatePointString = `${intermediatePoint.lat},${intermediatePoint.lng}`;
         
-        // 3. Wyznaczanie trasy (A -> B -> A)
+        // Wyznaczanie trasy (A -> B -> A)
         const params = {
             origin: `${startLocation.lat},${startLocation.lng}`,
-            destination: `${startLocation.lat},${startLocation.lng}`, 
+            destination: `${startLocation.lat},${startLocation.lng}`,
             waypoints: intermediatePointString, 
             optimizeWaypoints: false, 
             mode: 'walking',
@@ -153,7 +149,7 @@ app.post('/routes/generate', async (req, res) => {
 
             const diff = Math.abs(totalDistanceValue - TARGET_DISTANCE);
             
-            // Warunek sukcesu w ramach tolerancji
+            // Logika wyboru najlepszej trasy
             if (totalDistanceValue >= TARGET_DISTANCE * (1 - TOLERANCE) && totalDistanceValue <= TARGET_DISTANCE * MAX_OVERLENGTH_FACTOR) {
                 if (diff < minDiff) {
                     minDiff = diff;
@@ -166,25 +162,23 @@ app.post('/routes/generate', async (req, res) => {
                 if (diff < TARGET_DISTANCE * (TOLERANCE / 2)) {
                     break;
                 }
-            } 
-            
-            // Korekta promienia
-            if (totalDistanceValue < TARGET_DISTANCE) {
+
+            } else if (totalDistanceValue < TARGET_DISTANCE * (1 - TOLERANCE)) {
                 currentRadiusFactor *= CORRECTION_FACTOR;
-            } else {
-                 currentRadiusFactor /= CORRECTION_FACTOR;
+            }
+            else if (totalDistanceValue > TARGET_DISTANCE * MAX_OVERLENGTH_FACTOR) {
+                 currentRadiusFactor /= CORRECTION_FACTOR; 
             }
 
         } catch (error) {
             currentRadiusFactor *= CORRECTION_FACTOR;
         }
-    } 
+    }
 
-    
     // 4. Zwrócenie wyniku
     if (!bestRoute) {
         return res.status(404).json({
-            error: 'Nie udało się wyznaczyć pętli.',
+            error: 'Nie udało się wyznaczyć pętli o żądanym dystansie w dostępnych próbach.',
             details: `Nie znaleziono trasy bliskiej ${ (TARGET_DISTANCE / 1000).toFixed(2)} km.`
         });
     }
@@ -195,7 +189,7 @@ app.post('/routes/generate', async (req, res) => {
     res.json({
         status: 'OK',
         distance_km: distanceKm,
-        message: `Wyznaczono pętlę o dystansie ${distanceKm} km. Docelowy: ${targetKm} km.`,
+        message: `Wyznaczono pętlę o dystansie ${distanceKm} km w ${bestRoute.attempts} próbach. Docelowy: ${targetKm} km.`,
         polyline: bestRoute.polyline,
     });
 });
