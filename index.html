@@ -5,16 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generator Pętli Pieszych</title>
     
+    <!-- Ładowanie Google Maps JS API z kluczem i biblioteką geometry -->
 <script defer
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI&callback=initMap&libraries=geometry&loading=async">
     </script>
     
     <style>
+        /* Używam styli, które były w dostarczonym pliku */
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
         .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         h1 { color: #333; text-align: center; }
         label { display: block; margin-top: 10px; font-weight: bold; }
-        input[type="text"], input[type="number"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        /* Kontener dla pola adresu i przycisku lokalizacji */
+        .input-group { position: relative; }
+        
+        input[type="text"], input[type="number"] { 
+            width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; 
+        }
+
+        /* Styl dla przycisku Lokalizacji */
+        #use-location-btn {
+            position: absolute;
+            right: 5px;
+            top: 50%; /* Przesuń w dół, aby był centrycznie */
+            transform: translateY(-50%); /* Korekta dla wysokości przycisku */
+            padding: 8px 10px;
+            margin-top: 0;
+            width: auto; /* Nadpisanie width: 100% */
+            background-color: #28a745; /* Zielony kolor */
+            border-radius: 4px;
+        }
+
         button { 
             display: block; width: 100%; padding: 10px; margin-top: 20px; 
             background-color: #007bff; color: white; border: none; border-radius: 4px; 
@@ -23,6 +44,7 @@
         button:hover { background-color: #0056b3; }
         #results { margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
         .error { color: #dc3545; font-weight: bold; }
+        .success { color: #28a745; font-weight: bold; }
         #map {
             height: 400px; 
             width: 100%;
@@ -39,7 +61,14 @@
         <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
         
         <label for="origin">Punkt Startowy (Adres lub Lat,Lng):</label>
-        <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa">
+        <div class="input-group">
+            <!-- Dodane padding-right, aby tekst nie zachodził na przycisk lokalizacji -->
+            <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa" style="padding-right: 70px;"> 
+            <button id="use-location-btn" onclick="useCurrentLocation()" title="Użyj obecnej lokalizacji">
+                 <!-- Ikona Lokalizacji (można zastąpić SVG) -->
+                Lokalizacja
+            </button>
+        </div>
 
         <label for="distance">Docelowy Dystans Pętli (km):</label>
         <input type="number" id="distance" value="10" placeholder="np. 10" min="1">
@@ -54,13 +83,21 @@
     <script>
         let map; 
         let routePolyline; 
+        let startMarker; // Dodano marker dla punktu startowego
 
         // Funkcja inicjalizująca mapę (wywoływana przez API Google)
         function initMap() {
             if (!map) {
+                const defaultCenter = { lat: 52.23, lng: 21.01 };
                 map = new google.maps.Map(document.getElementById('map'), {
-                    center: { lat: 52.23, lng: 21.01 },
+                    center: defaultCenter,
                     zoom: 12,
+                });
+                // Inicjalizacja markera na domyślnej pozycji
+                startMarker = new google.maps.Marker({
+                    position: defaultCenter,
+                    map: map,
+                    title: "Punkt Startowy"
                 });
                 console.log("Mapa została zainicjowana!");
             }
@@ -72,6 +109,7 @@
                 routePolyline.setMap(null);
                 routePolyline = null;
             }
+            // Nie usuwamy markera startowego, tylko go aktualizujemy
         }
         
         function drawRoute(encodedPolyline) {
@@ -79,14 +117,14 @@
                 initMap();
             }
 
-            if (!map) {
-                 console.error("Mapa jest null.");
+            if (!map || !google.maps.geometry) {
+                 console.error("Mapa lub biblioteka geometry jest niedostępna.");
                  return;
             }
             
             clearRoute(); 
 
-            // Rysowanie
+            // Dekodowanie i rysowanie trasy
             const path = google.maps.geometry.encoding.decodePath(encodedPolyline);
             routePolyline = new google.maps.Polyline({
                 path: path,
@@ -98,6 +136,14 @@
 
             routePolyline.setMap(map);
 
+            // Aktualizacja markera startowego (pierwszy punkt trasy)
+            if (path.length > 0) {
+                const startPoint = path[0];
+                startMarker.setPosition(startPoint);
+                startMarker.setMap(map); // Upewnienie się, że jest widoczny
+            }
+
+
             // Dopasowanie widoku mapy
             const bounds = new google.maps.LatLngBounds();
             for (let i = 0; i < path.length; i++) {
@@ -106,15 +152,70 @@
             map.fitBounds(bounds);
         }
 
+        function displayMessage(type, text) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.classList.remove('error', 'success');
+            
+            if (type === 'error') {
+                resultsDiv.innerHTML = `<span class="error">${text}</span>`;
+                resultsDiv.classList.add('error');
+            } else if (type === 'success') {
+                resultsDiv.innerHTML = `<span class="success">${text}</span>`;
+                resultsDiv.classList.add('success');
+            } else {
+                 resultsDiv.innerHTML = text;
+            }
+        }
+
+        // --- NOWA FUNKCJA GEOLOKALIZACJI ---
+        function useCurrentLocation() {
+            const originInput = document.getElementById('origin');
+            displayMessage('default', 'Pobieranie obecnej lokalizacji...');
+
+            if (!navigator.geolocation) {
+                displayMessage('error', 'Twoja przeglądarka nie wspiera geolokalizacji.');
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude.toFixed(6);
+                    const lng = position.coords.longitude.toFixed(6);
+                    
+                    const coordsString = `${lat},${lng}`;
+                    originInput.value = coordsString;
+                    
+                    displayMessage('default', `Lokalizacja ustawiona na: ${coordsString}. Kliknij "Wyznacz Trasę Pętli".`);
+                    
+                    // Opcjonalnie: Przesuń mapę i marker do nowej lokalizacji
+                    const currentLatLng = { lat: parseFloat(lat), lng: parseFloat(lng) };
+                    map.setCenter(currentLatLng);
+                    map.setZoom(14); 
+                    startMarker.setPosition(currentLatLng);
+                    startMarker.setMap(map);
+                },
+                (error) => {
+                    let errorMessage;
+                    if (error.code === error.PERMISSION_DENIED) {
+                        errorMessage = "Odmowa dostępu do geolokalizacji. Wprowadź adres ręcznie.";
+                    } else {
+                        errorMessage = `Błąd geolokalizacji: ${error.message}.`;
+                    }
+                    displayMessage('error', errorMessage);
+                }
+            );
+        }
+
+
         async function generateRoute() {
             const apiUrlElement = document.getElementById('api-url');
             const apiUrl = apiUrlElement.value;
             const origin = document.getElementById('origin').value;
-            const distance = document.getElementById('distance').value; // NOWE: POBIERANIE DYSTANSU
+            const distance = document.getElementById('distance').value; 
             
             // Walidacja dystansu
             if (isNaN(parseFloat(distance)) || parseFloat(distance) <= 0) {
-                document.getElementById('results').innerHTML = '<span class="error">BŁĄD: Dystans musi być liczbą większą niż 0.</span>';
+                displayMessage('error', 'BŁĄD: Dystans musi być liczbą większą niż 0.');
                 return;
             }
 
@@ -124,27 +225,30 @@
             clearRoute(); 
 
             try {
+                // Konwersja z km na metry przed wysłaniem do serwera
+                const distanceMeters = parseFloat(distance) * 1000;
+                
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         origin: origin, 
-                        distance: parseFloat(distance) * 1000 // WYSYŁAMY DO API W METRACH
+                        distance: distanceMeters
                     })
                 });
 
                 const data = await response.json();
 
                 if (!response.ok) {
-                    resultsDiv.innerHTML = `<span class="error">BŁĄD: ${data.error || 'Nieznany błąd'}</span>\nSzczegóły: ${data.details || 'Brak'}`;
+                    resultsDiv.innerHTML = `<span class="error">BŁĄD: ${data.error || 'Nieznany błąd serwera'}</span>\nSzczegóły: ${data.details || 'Brak'}`;
                     return;
                 }
 
                 // Sukces
                 resultsDiv.innerHTML = `
-                    <p style="color:#28a745; font-weight: bold;">STATUS: ${data.status}</p>
-                    <p><strong>Dystans:</strong> ${data.distance_km} km</p>
-                    <p><strong>Message:</strong> ${data.message}</p>
+                    <p class="success">STATUS: ${data.status}</p>
+                    <p><strong>Wyznaczony dystans:</strong> ${data.distance_km} km</p>
+                    <p><strong>Wiadomość:</strong> ${data.message}</p>
                     <p><strong>Poliline (Fragment):</strong> ${data.polyline.substring(0, 50)}... [${data.polyline.length} znaków]</p>
                 `;
                 
