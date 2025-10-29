@@ -93,6 +93,19 @@
             transition: background-color 0.3s;
         }
         button.main-action:hover { background-color: #2980b9; }
+        
+        /* Styl dla stanu ładowania przycisku głównego */
+        button.main-action.loading {
+            background-color: #f39c12; /* Żółty/Pomarańczowy dla ładowania */
+            cursor: not-allowed;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(243, 156, 18, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0); }
+        }
 
         /* Sekcja Wyników */
         #results-container {
@@ -120,6 +133,7 @@
         .error { color: #c0392b; font-weight: bold; background-color: #fbdada; border: 1px solid #c0392b; }
         .success { color: #27ae60; font-weight: bold; background-color: #e9f7ef; border: 1px solid #27ae60; }
         .info { color: #34495e; background-color: #f0f3f5; }
+        .loading { color: #f39c12; font-weight: bold; background-color: #fdf5e6; border: 1px solid #f39c12; }
 
         /* Sekcja Mapy */
         #map {
@@ -160,7 +174,7 @@
                     <option value="W">Zachód (W)</option>
                 </select>
                 
-                <button class="main-action" onclick="generateRoute()">4. Wyznacz Trasę Pętli</button>
+                <button class="main-action" id="generate-btn" onclick="generateRoute()">4. Wyznacz Trasę Pętli</button>
             </div>
 
             <div class="map-section">
@@ -182,11 +196,11 @@
         // Funkcja do dynamicznego wyświetlania komunikatów
         function displayMessage(type, text) {
             const resultsDiv = document.getElementById('results');
-            resultsDiv.classList.remove('error', 'success', 'info');
+            resultsDiv.classList.remove('error', 'success', 'info', 'loading');
             resultsDiv.classList.add(type);
             
-            // W przypadku błędu pokazujemy tylko komunikat, w pozostałych przypadkach formatujemy
-            if (type === 'error') {
+            // W przypadku błędu lub ładowania pokazujemy tylko komunikat
+            if (type === 'error' || type === 'loading') {
                 resultsDiv.innerHTML = text;
             } else if (type === 'success') {
                 // Dla sukcesu, oczekujemy obiektu zawierającego szczegóły trasy
@@ -197,7 +211,7 @@
                     <p style="font-size: 0.8em; opacity: 0.7;">Poliline: ${text.polyline.substring(0, 50)}... [${text.polyline.length} znaków]</p>
                 `;
             } else { // info/default
-                 resultsDiv.innerHTML = text;
+                resultsDiv.innerHTML = text;
             }
         }
 
@@ -304,11 +318,15 @@
 
         // Główna funkcja wyznaczająca trasę
         async function generateRoute() {
+            const generateBtn = document.getElementById('generate-btn');
+            
+            if (generateBtn.classList.contains('loading')) return; // Zabezpieczenie przed wielokrotnym kliknięciem
+
             const apiUrlElement = document.getElementById('api-url');
             const apiUrl = apiUrlElement.value;
             const origin = document.getElementById('origin').value.trim();
             const distance = document.getElementById('distance').value;
-            const direction = document.getElementById('direction').value; // Nowa wartość
+            const direction = document.getElementById('direction').value; 
             
             // Walidacja dystansu
             if (isNaN(parseFloat(distance)) || parseFloat(distance) <= 0) {
@@ -321,7 +339,9 @@
                 return;
             }
             
-            displayMessage('info', "Wysyłam zapytanie do API i szukam najlepszej trasy. Może to potrwać kilka sekund...");
+            generateBtn.classList.add('loading');
+            generateBtn.textContent = 'Trwa szukanie trasy...';
+            displayMessage('loading', "Wysyłam zapytanie do API i szukam najlepszej trasy. Może to potrwać kilka sekund...");
             clearRoute(); 
 
             try {
@@ -334,7 +354,7 @@
                     body: JSON.stringify({ 
                         origin: origin, 
                         distance: distanceMeters,
-                        direction: direction // Dodanie nowego parametru do requestu
+                        direction: direction
                     })
                 });
 
@@ -362,6 +382,9 @@
 
             } catch (error) {
                 displayMessage('error', `BŁĄD SIECI: Nie udało się połączyć z API. Sprawdź konsolę F12, aby zobaczyć szczegóły. Szczegóły: ${error.message}`);
+            } finally {
+                generateBtn.classList.remove('loading');
+                generateBtn.textContent = '4. Wyznacz Trasę Pętli';
             }
         }
 
@@ -370,7 +393,7 @@
         
         // Ustawienie domyślnego stanu komunikatu
         document.addEventListener('DOMContentLoaded', () => {
-             displayMessage('info', "Wprowadź dane i kliknij 'Wyznacz Trasę Pętli' lub 'Lokalizacja' aby zacząć.");
+            displayMessage('info', "Wprowadź dane i kliknij 'Wyznacz Trasę Pętli' lub 'Lokalizacja' aby zacząć.");
         });
 
     </script>
