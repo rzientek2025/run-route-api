@@ -6,6 +6,7 @@
     <title>Generator Pętli Pieszych</title>
     
     <!-- Ładowanie Google Maps JS API z kluczem i biblioteką geometry -->
+    <!-- UWAGA: Zastąp TWÓJ_KLUCZ_API własnym kluczem. Nie używaj klucza Google Geocoding/Directions API tutaj! -->
     <script defer
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOoFkW8KiYgP86c4I2kz5ODr5i4P0GlkI&callback=initMap&libraries=geometry&loading=async">
     </script>
@@ -135,14 +136,15 @@
 
         <div class="content-grid">
             <div class="form-section">
-                <!-- Ukryte pole z URL API -->
-                <input type="hidden" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate">
+                
+                <label for="api-url">Adres URL API (Backend):</label>
+                <input type="text" id="api-url" value="https://run-route-app-kxfys.ondigitalocean.app/api/routes/generate" placeholder="np. http://localhost:8080/routes/generate">
                 
                 <label for="origin">1. Punkt Startowy (Adres lub Współrzędne Lat,Lng):</label>
                 <div class="input-group">
                     <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa lub 52.23,21.01"> 
                     <button id="use-location-btn" onclick="useCurrentLocation()" title="Użyj obecnej lokalizacji">
-                         Lokalizacja
+                            Lokalizacja
                     </button>
                 </div>
 
