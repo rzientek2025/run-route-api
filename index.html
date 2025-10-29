@@ -48,11 +48,21 @@
 
         label { display: block; margin-top: 15px; font-weight: 600; color: #34495e; }
         
-        /* Kontener dla pola adresu i przycisku lokalizacji */
+        /* Kontener dla pola adresu i przycisków */
         .input-group { position: relative; display: flex; align-items: center; margin-top: 5px; }
+
+        .input-group input[type="text"] {
+            flex-grow: 1;
+        }
+
+        .input-group-buttons {
+            display: flex;
+            gap: 5px; /* Odstęp między przyciskami */
+            margin-left: 10px;
+            flex-shrink: 0;
+        }
         
         input[type="text"], input[type="number"], select { 
-            flex-grow: 1;
             padding: 12px; 
             border: 1px solid #bdc3c7; 
             border-radius: 6px; 
@@ -66,25 +76,38 @@
         }
 
         /* Styl dla przycisku Lokalizacji */
-        #use-location-btn {
+        .input-group button {
             padding: 12px 15px;
-            margin-left: 10px; /* Odstęp od pola tekstowego */
             width: auto; 
-            background-color: #2ecc71; /* Zielony kolor */
             color: white;
             border: none;
             border-radius: 6px;
             cursor: pointer;
             font-weight: bold;
             transition: background-color 0.3s, transform 0.1s;
+            line-height: 1; /* Ujednolicenie wysokości */
         }
-
+        
+        #use-location-btn {
+             background-color: #2ecc71; /* Zielony kolor */
+        }
         #use-location-btn:hover {
             background-color: #27ae60;
         }
-        #use-location-btn:active {
+        
+        /* NOWY STYL DLA PRZYCISKU ZAZNACZANIA */
+        #mark-point-btn {
+             background-color: #3498db; /* Niebieski kolor */
+        }
+        #mark-point-btn:hover {
+            background-color: #2980b9;
+        }
+
+
+        .input-group button:active {
             transform: scale(0.98);
         }
+
 
         button.main-action { 
             display: block; width: 100%; padding: 15px; margin-top: 30px; 
@@ -157,9 +180,18 @@
                 <label for="origin">1. Punkt Startowy (Adres lub Współrzędne Lat,Lng):</label>
                 <div class="input-group">
                     <input type="text" id="origin" value="Plac Defilad 1, Warszawa" placeholder="np. Plac Defilad 1, Warszawa lub 52.23,21.01"> 
-                    <button id="use-location-btn" onclick="useCurrentLocation()" title="Użyj obecnej lokalizacji">
-                            Lokalizacja
-                    </button>
+                    
+                    <div class="input-group-buttons">
+                        <!-- ISTNIEJĄCY PRZYCISK LOKALIZACJA -->
+                        <button id="use-location-btn" onclick="useCurrentLocation()" title="Użyj obecnej lokalizacji">
+                                Lokalizacja
+                        </button>
+
+                        <!-- NOWY PRZYCISK ZAZNACZANIA PUNKTU -->
+                        <button id="mark-point-btn" onclick="markStartPoint()" title="Zaznacz punkt na mapie">
+                            Zaznacz
+                        </button>
+                    </div>
                 </div>
 
                 <label for="distance">2. Docelowy Dystans Pętli (km):</label>
@@ -192,6 +224,7 @@
         let map; 
         let routePolyline; 
         let startMarker; 
+        let geocoder; // Zmienna do obsługi geokodowania
 
         // Funkcja do dynamicznego wyświetlania komunikatów
         function displayMessage(type, text) {
@@ -200,7 +233,7 @@
             resultsDiv.classList.add(type);
             
             // W przypadku błędu lub ładowania pokazujemy tylko komunikat
-            if (type === 'error' || type === 'loading') {
+            if (type === 'error' || type === 'loading' || type === 'info') {
                 resultsDiv.innerHTML = text;
             } else if (type === 'success') {
                 // Dla sukcesu, oczekujemy obiektu zawierającego szczegóły trasy
@@ -215,6 +248,66 @@
             }
         }
 
+        /**
+         * Ustawia znacznik startowy na mapie i wyśrodkowuje widok.
+         * @param {google.maps.LatLngLiteral} latLng - Współrzędne do ustawienia.
+         * @param {string} title - Tytuł markera.
+         */
+        function setMapMarker(latLng, title) {
+            if (!map || !startMarker) return;
+
+            startMarker.setPosition(latLng);
+            startMarker.setMap(map);
+            startMarker.setTitle(title);
+            map.setCenter(latLng);
+            map.setZoom(14); // Przybliżenie, żeby widzieć punkt
+        }
+
+        // Funkcja do geokodowania adresu lub współrzędnych i zaznaczenia punktu
+        function markStartPoint() {
+            if (!map || !geocoder) {
+                displayMessage('error', "BŁĄD: Mapa lub usługa Geocoding nie jest jeszcze gotowa.");
+                return;
+            }
+
+            const origin = document.getElementById('origin').value.trim();
+            if (!origin) {
+                displayMessage('error', 'BŁĄD: Punkt startowy nie może być pusty.');
+                return;
+            }
+
+            // 1. Sprawdzenie, czy to są współrzędne (Lat,Lng)
+            const coordsMatch = origin.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+            
+            if (coordsMatch) {
+                const lat = parseFloat(coordsMatch[1]);
+                const lng = parseFloat(coordsMatch[2]);
+                const latLng = { lat, lng };
+
+                // Walidacja podstawowa
+                if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                    setMapMarker(latLng, "Punkt Startowy (Współrzędne)");
+                    displayMessage('info', `Zaznaczono punkt startowy na mapie (Współrzędne): ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                    return;
+                }
+            }
+
+            // 2. Jeśli to nie współrzędne, użyj Geokodera do znalezienia adresu
+            displayMessage('info', `Szukanie adresu: "${origin}"...`);
+
+            geocoder.geocode({ 'address': origin }, (results, status) => {
+                if (status === 'OK' && results[0]) {
+                    const location = results[0].geometry.location;
+                    const latLng = { lat: location.lat(), lng: location.lng() };
+
+                    setMapMarker(latLng, results[0].formatted_address);
+                    displayMessage('info', `Znaleziono i zaznaczono punkt startowy: ${results[0].formatted_address}`);
+                } else {
+                    displayMessage('error', `BŁĄD: Nie udało się zlokalizować "${origin}". Status: ${status}. Sprawdź, czy klucz API jest poprawny.`);
+                }
+            });
+        }
+
 
         // Funkcja inicjalizująca mapę (wywoływana przez API Google)
         function initMap() {
@@ -223,6 +316,10 @@
                 center: defaultCenter,
                 zoom: 12,
             });
+
+            // Inicjalizacja Geocodera
+            geocoder = new google.maps.Geocoder();
+
             // Marker startowy
             startMarker = new google.maps.Marker({
                 position: defaultCenter,
@@ -265,9 +362,8 @@
 
             // Aktualizacja markera startowego
             const actualStartPoint = path.length > 0 ? path[0] : startPoint;
-            startMarker.setPosition(actualStartPoint);
-            startMarker.setMap(map); 
-
+            setMapMarker(actualStartPoint, "Start pętli");
+            
             // Dopasowanie widoku mapy
             const bounds = new google.maps.LatLngBounds();
             for (let i = 0; i < path.length; i++) {
@@ -291,17 +387,14 @@
                     const lat = position.coords.latitude.toFixed(6);
                     const lng = position.coords.longitude.toFixed(6);
                     
-                    const coordsString = `${lat},${lng}`;
+                    const coordsString = `${lat}, ${lng}`;
                     originInput.value = coordsString;
-                    
-                    displayMessage('info', `Lokalizacja ustawiona na: ${coordsString}. Kliknij "Wyznacz Trasę Pętli".`);
                     
                     // Przesuń mapę i marker do nowej lokalizacji
                     const currentLatLng = { lat: parseFloat(lat), lng: parseFloat(lng) };
-                    map.setCenter(currentLatLng);
-                    map.setZoom(14); 
-                    startMarker.setPosition(currentLatLng);
-                    startMarker.setMap(map);
+                    setMapMarker(currentLatLng, "Twoja obecna lokalizacja");
+
+                    displayMessage('info', `Lokalizacja ustawiona na: ${coordsString}. Kliknij "Wyznacz Trasę Pętli".`);
                 },
                 (error) => {
                     let errorMessage;
@@ -328,12 +421,11 @@
             const distance = document.getElementById('distance').value;
             const direction = document.getElementById('direction').value; 
             
-            // Walidacja dystansu
+            // Walidacja
             if (isNaN(parseFloat(distance)) || parseFloat(distance) <= 0) {
                 displayMessage('error', 'BŁĄD: Dystans musi być liczbą większą niż 0.');
                 return;
             }
-             // Walidacja punktu startowego
             if (!origin) {
                 displayMessage('error', 'BŁĄD: Punkt startowy nie może być pusty.');
                 return;
@@ -391,9 +483,12 @@
         // Inicjalizacja mapy po załadowaniu skryptu Google
         window.initMap = initMap;
         
-        // Ustawienie domyślnego stanu komunikatu
+        // Ustawienie domyślnego stanu komunikatu i przypisanie akcji do nowego przycisku
         document.addEventListener('DOMContentLoaded', () => {
-            displayMessage('info', "Wprowadź dane i kliknij 'Wyznacz Trasę Pętli' lub 'Lokalizacja' aby zacząć.");
+            displayMessage('info', "Wprowadź dane i kliknij 'Wyznacz Trasę Pętli' lub 'Lokalizacja' albo 'Zaznacz' aby zacząć.");
+
+            // Dodanie nasłuchiwania dla nowego przycisku (dla czytelności w JavaScript)
+            document.getElementById('mark-point-btn').addEventListener('click', markStartPoint);
         });
 
     </script>
