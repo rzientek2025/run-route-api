@@ -62,6 +62,9 @@ app.post('/routes/generate', async (req, res) => {
 
     const { origin, distance, direction } = req.body; // Dodano 'direction'
     const TARGET_DISTANCE = distance; // Dystans jest w metrach
+    
+    // Ustawienie stałe dla urozmaicenia tras
+    const OPTIMIZE_FOR_DIVERSITY = true; 
 
     // Walidacja klucza API
     if (!process.env.GOOGLE_API_KEY) {
@@ -162,6 +165,9 @@ app.post('/routes/generate', async (req, res) => {
                 mode: 'walking',
                 avoidFerries: true,
                 avoidTolls: true,
+                // Nowe parametry dla urozmaicenia trasy
+                avoidHighways: OPTIMIZE_FOR_DIVERSITY,
+                language: OPTIMIZE_FOR_DIVERSITY ? 'pl' : undefined, // Wprowadzenie regionu/języka
                 key: process.env.GOOGLE_API_KEY
             };
 
